@@ -1,0 +1,82 @@
+{
+  "tracks": [
+    {
+      "id": "acoustic_guitar_emotional_nostalgia",
+      "file": "ACOUSTIC-GUITAR-EMOTIONAL-NOSTALGIA.mp3",
+      "moods": ["nostalgic", "warm", "reflective"],
+      "energy": "low",
+      "tempo": "slow",
+      "hasDrop": false,
+      "intro": "soft",
+      "outro": "resolving",
+      "attributionRequired": false,
+      "source": "local",
+      "recommendedStartSec": 0
+    },
+    {
+      "id": "golden_waves",
+      "file": "golden-waves.mp3",
+      "moods": ["quiet", "reflective", "calm"],
+      "energy": "low",
+      "tempo": "slow",
+      "hasDrop": false,
+      "intro": "soft",
+      "outro": "resolving",
+      "attributionRequired": false,
+      "source": "local",
+      "recommendedStartSec": 0
+    },
+    {
+      "id": "affection_full_length",
+      "file": "Affection_full-length.mp3",
+      "moods": ["tender", "warm", "romantic"],
+      "energy": "low",
+      "tempo": "slow",
+      "hasDrop": false,
+      "intro": "soft",
+      "outro": "resolving",
+      "attributionRequired": false,
+      "source": "local",
+      "recommendedStartSec": 0
+    },
+    {
+      "id": "inspirations_cinematic_felt_piano",
+      "file": "Inspirations-Cinematic-Felt-Piano.mp3",
+      "moods": ["reflective", "cinematic", "hopeful"],
+      "energy": "low",
+      "tempo": "slow",
+      "hasDrop": false,
+      "intro": "soft",
+      "outro": "resolving",
+      "attributionRequired": false,
+      "source": "local",
+      "recommendedStartSec": 0
+    },
+    {
+      "id": "nature",
+      "file": "Nature.mp3",
+      "moods": ["calm", "open", "contemplative"],
+      "energy": "low",
+      "tempo": "slow",
+      "hasDrop": false,
+      "intro": "soft",
+      "outro": "resolving",
+      "attributionRequired": false,
+      "source": "local",
+      "recommendedStartSec": 0
+    },
+    {
+      "id": "proposal",
+      "file": "PROPOSA.mp3",
+      "moods": ["cinematic", "tender", "uplifting"],
+      "energy": "medium",
+      "tempo": "medium",
+      "hasDrop": false,
+      "intro": "soft",
+      "outro": "resolving",
+      "attributionRequired": false,
+      "source": "local",
+      "recommendedStartSec": 0
+    }
+  ]
+}

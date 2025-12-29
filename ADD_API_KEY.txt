@@ -1,0 +1,60 @@
+═══════════════════════════════════════════════════════════════
+  ADD YOUR OPENAI API KEY TO .env FILE
+═══════════════════════════════════════════════════════════════
+
+The .env file exists but is missing the OPENAI_API_KEY.
+
+STEP 1: Open the file: .env (in the project root)
+
+STEP 2: Add this line (replace with your actual key):
+   OPENAI_API_KEY=sk-your-actual-api-key-here
+
+Your .env file should look like:
+   VITE_API_BASE_URL=http://localhost:3001
+   OPENAI_API_KEY=sk-your-actual-api-key-here
+
+STEP 3: Get your API key from:
+   https://platform.openai.com/api-keys
+
+STEP 4: Restart the server:
+   - Stop the current server (Ctrl+C)
+   - Run: npm run dev:server
+
+═══════════════════════════════════════════════════════════════
+
+
+  ADD YOUR OPENAI API KEY TO .env FILE
+═══════════════════════════════════════════════════════════════
+
+The .env file exists but is missing the OPENAI_API_KEY.
+
+STEP 1: Open the file: .env (in the project root)
+
+STEP 2: Add this line (replace with your actual key):
+   OPENAI_API_KEY=sk-your-actual-api-key-here
+
+Your .env file should look like:
+   VITE_API_BASE_URL=http://localhost:3001
+   OPENAI_API_KEY=sk-your-actual-api-key-here
+
+STEP 3: Get your API key from:
+   https://platform.openai.com/api-keys
+
+STEP 4: Restart the server:
+   - Stop the current server (Ctrl+C)
+   - Run: npm run dev:server
+
+═══════════════════════════════════════════════════════════════
+
+
+
+
+
+
+
+
+
+
+
+
+
