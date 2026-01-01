@@ -1,4 +1,4 @@
-﻿import 'dotenv/config';
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
@@ -59,6 +59,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 export { app }; // Export app so index.js can register routes
 const PORT = process.env.PORT || 3001;
+const HOST = "0.0.0.0";
 
 // Constants
 const MIN_PHOTOS = 6;
@@ -579,7 +580,7 @@ OUTPUT FORMAT (JSON only):
 RULES:
 - **CRITICAL: Use ALL photos. selected = [0, 1, 2, ..., N-1] where N = total photo count**
 - **CRITICAL: Reorder photos for emotional storytelling arc. DO NOT use upload order.**
-- **Reorder based on visual flow: wider shots â†’ closer shots â†’ intimate moments â†’ quiet ending**
+- **Reorder based on visual flow: wider shots → closer shots → intimate moments → quiet ending**
 - **Analyze image metadata (width, height, size) to infer composition and reorder accordingly**
 - Total video length: ~60 seconds (auto-compute per-image durations to fit)
 - Per-image durations should be calculated to fit total: base = (targetSeconds - transitions) / N, then clamp to 0.8-3.0s
@@ -602,7 +603,7 @@ Create a plan that organizes images into the 5-chapter emotional arc.`
           temperature: 0.3,
           max_tokens: 500
         }, {
-          signal: controller.signal  // âœ… Correct: signal passed as second argument (request options)
+          signal: controller.signal  // ✅ Correct: signal passed as second argument (request options)
         });
         
         clearTimeout(timeout);
@@ -1244,7 +1245,7 @@ async function renderFromPlan(plan, photoPathsMap, outputPath, memoryId, photos,
   if (isSequential && plan.usedPlanner === 'ai') {
     console.warn(`[RENDER] WARNING: AI planner returned sequential order [${plan.order.join(',')}] - this suggests AI didn't reorder!`);
   } else if (!isSequential) {
-    console.log(`[RENDER] âœ“ Order is NOT sequential - AI reordering confirmed`);
+    console.log(`[RENDER] ✓ Order is NOT sequential - AI reordering confirmed`);
   }
   
   // CRITICAL: Build photoPathsMap from orderedFiles (AI order), NOT from original uploads
@@ -1366,9 +1367,9 @@ async function renderFromPlan(plan, photoPathsMap, outputPath, memoryId, photos,
       console.log(`[SEGMENT][${i}] FIRST SEGMENT RENDERED FROM: ${photoFilename} (AI order index 0)`);
       console.log(`[SEGMENT][${i}] Upload order would be: ${photos[0]?.filename || photos[0]?.originalname || 'unknown'}`);
       if (photoFilename !== (photos[0]?.filename || photos[0]?.originalname)) {
-        console.log(`[SEGMENT][${i}] âœ“ AI ORDER CONFIRMED: First segment is NOT first upload`);
+        console.log(`[SEGMENT][${i}] ✓ AI ORDER CONFIRMED: First segment is NOT first upload`);
       } else {
-        console.warn(`[SEGMENT][${i}] âš  WARNING: First segment matches first upload - AI may not have reordered`);
+        console.warn(`[SEGMENT][${i}] ⚠ WARNING: First segment matches first upload - AI may not have reordered`);
       }
     }
     
@@ -1741,8 +1742,8 @@ async function renderWithXfade(ffmpegPath, segments, segmentDurations, transitio
   const scale24 = fps / 24;
 
   // Global fades are timeline-level editorial grammar, not AI decisions.
-  // Fade-in: 18â€“24 frames @24fps (scaled by fps)
-  // Fade-out: 24â€“30 frames @24fps (scaled by fps)
+  // Fade-in: 18–24 frames @24fps (scaled by fps)
+  // Fade-out: 24–30 frames @24fps (scaled by fps)
   // Hold black: 12 frames @24fps (scaled by fps)
   const fadeInFrames = clampInt(18 * scale24, 18 * scale24, 24 * scale24);
   const fadeOutFrames = clampInt(24 * scale24, 24 * scale24, 30 * scale24);
@@ -1886,9 +1887,9 @@ function renderSegment(ffmpegPath, templateConfig, outputPath, segmentIndex = 0,
     const motionEnabled = MOTION_MODE !== 'OFF';
     
     console.log(`[SEGMENT][${segmentIndex}]   MOTION_MODE: ${MOTION_MODE} (motion ${motionEnabled ? 'ENABLED' : 'DISABLED'})`);
-    console.log(`[SEGMENT][${segmentIndex}]   Has zoompan (motion): ${hasZoompan ? 'âœ"' : 'âœ— MISSING - NO MOTION!'}`);
-    console.log(`[SEGMENT][${segmentIndex}]   Has scale=${targetW}:${targetH}: ${hasScale ? 'âœ"' : 'âœ— MISSING!'}`);
-    console.log(`[SEGMENT][${segmentIndex}]   Has crop=${targetW}:${targetH}: ${hasCrop ? 'âœ"' : 'âœ— MISSING!'}`);
+    console.log(`[SEGMENT][${segmentIndex}]   Has zoompan (motion): ${hasZoompan ? '�"' : '✗ MISSING - NO MOTION!'}`);
+    console.log(`[SEGMENT][${segmentIndex}]   Has scale=${targetW}:${targetH}: ${hasScale ? '�"' : '✗ MISSING!'}`);
+    console.log(`[SEGMENT][${segmentIndex}]   Has crop=${targetW}:${targetH}: ${hasCrop ? '�"' : '✗ MISSING!'}`);
     console.log(`[SEGMENT][${segmentIndex}]   Full filter: ${templateConfig.filter}`);
     console.log(`[SEGMENT][${segmentIndex}] ========================================`);
     
@@ -1906,9 +1907,9 @@ function renderSegment(ffmpegPath, templateConfig, outputPath, segmentIndex = 0,
   // Log segment generation details (especially for first segment)
   if (segmentIndex === 0 || templateConfig.metadata) {
     const meta = templateConfig.metadata || {};
-    const zoomDesc = (meta.motionType === 'push-in' || meta.zoomType === 'push-in' || meta.motionType === 'punch-in') ? `push-in (${meta.startZoom?.toFixed(2)}â†’${meta.endZoom?.toFixed(2)})` : 
-                     (meta.motionType === 'pull-out' || meta.zoomType === 'pull-out') ? `pull-out (${meta.startZoom?.toFixed(2)}â†’${meta.endZoom?.toFixed(2)})` : 
-                     meta.motionType === 'two-stage' ? `two-stage (${meta.startZoom?.toFixed(2)}â†’${meta.endZoom?.toFixed(2)}, hold=${(meta.holdPct * 100).toFixed(0)}%)` :
+    const zoomDesc = (meta.motionType === 'push-in' || meta.zoomType === 'push-in' || meta.motionType === 'punch-in') ? `push-in (${meta.startZoom?.toFixed(2)}→${meta.endZoom?.toFixed(2)})` : 
+                     (meta.motionType === 'pull-out' || meta.zoomType === 'pull-out') ? `pull-out (${meta.startZoom?.toFixed(2)}→${meta.endZoom?.toFixed(2)})` : 
+                     meta.motionType === 'two-stage' ? `two-stage (${meta.startZoom?.toFixed(2)}→${meta.endZoom?.toFixed(2)}, hold=${(meta.holdPct * 100).toFixed(0)}%)` :
                      'unknown';
     const panX = meta.panX !== undefined ? meta.panX : (meta.driftX || 0);
     const panY = meta.panY !== undefined ? meta.panY : (meta.driftY || 0);
@@ -2403,10 +2404,10 @@ app.post('/api/create-memory', async (req, res) => {
     photos.push(...processedPhotos);
     
 
-    console.log('[RENDER] Using 3-stage pipeline: Vision Analysis â†’ Sequence Planning â†’ Motion Planning');
+    console.log('[RENDER] Using 3-stage pipeline: Vision Analysis → Sequence Planning → Motion Planning');
     
     // ========================================
-    // 3-STAGE PIPELINE: Analyze â†’ Plan â†’ Animate
+    // 3-STAGE PIPELINE: Analyze → Plan → Animate
     // ========================================
     
     let analysisResults = [];
@@ -3214,7 +3215,7 @@ app.post('/api/debug/xfade-two', async (req, res) => {
     console.log(`[DEBUG_XFADE] Success: ${outputPath} (${stats.size} bytes)`);
     
     const videoFilename = path.basename(outputPath);
-    const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
+    const baseUrl = process.env.BASE_URL || 'http://${HOST}:3001';
     res.json({
       success: true,
       videoUrl: `${baseUrl}/outputs/${videoFilename}`,
@@ -3270,7 +3271,7 @@ app.post('/api/generate-video', async (req, res) => {
     const outputPath = path.join(outputsDir, `${sessionId}.mp4`);
     await renderFromPlan(plan, photoPathsMap, outputPath, sessionId, photos);
     
-    const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
+    const baseUrl = process.env.BASE_URL || 'http://${HOST}:3001';
     res.json({
       success: true,
       videoPath: `${baseUrl}/outputs/${sessionId}.mp4`
@@ -3416,9 +3417,9 @@ app.use((req, res) => {
 });
 
 // Start server with conflict-safe error handling
-const server = app.listen(PORT, () => {
-  console.log(`[SERVER] listening http://localhost:${PORT}`);
-  console.log(`[SERVER] Health check: http://localhost:${PORT}/api/health`);
+const server = app.listen(PORT, HOST, () => {
+  console.log(`[SERVER] listening http://${HOST}:${PORT}`);
+  console.log(`[SERVER] Health check: http://${HOST}:${PORT}/api/health`);
   console.log('[ROUTES] media playback-url enabled');
   
   if (isFfmpegAvailable()) {
@@ -3458,9 +3459,9 @@ async function checkPortAndKill(port) {
         for (const pid of pids) {
           try {
             await exec(`taskkill /PID ${pid} /F /T`);
-            console.log(`[SERVER] âœ“ Killed PID ${pid}`);
+            console.log(`[SERVER] ✓ Killed PID ${pid}`);
           } catch (killError) {
-            console.warn(`[SERVER] âœ— Failed to kill PID ${pid} (may require admin or already dead)`);
+            console.warn(`[SERVER] ✗ Failed to kill PID ${pid} (may require admin or already dead)`);
           }
         }
         
@@ -3488,9 +3489,9 @@ server.on('error', async (err) => {
     // Try again after cleanup
     setTimeout(() => {
       console.log(`[SERVER] Retrying to start server on port ${PORT}...`);
-      app.listen(PORT, () => {
-        console.log(`[SERVER] listening http://localhost:${PORT}`);
-        console.log(`[SERVER] Health check: http://localhost:${PORT}/api/health`);
+      app.listen(PORT, HOST, () => {
+        console.log(`[SERVER] listening http://${HOST}:${PORT}`);
+        console.log(`[SERVER] Health check: http://${HOST}:${PORT}/api/health`);
       });
     }, 2000);
   } else {
