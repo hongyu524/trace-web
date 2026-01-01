@@ -15,17 +15,11 @@ dist-ssr
 !.vscode/extensions.json
 .idea
 .DS_Store
-Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 .env
-
-# local renders / temp artifacts
-outputs/
-server/uploads/
-server/.env
 secrets/
 *.pem

@@ -41,15 +41,18 @@ export class ProgressReporter {
 
   /**
    * Report error
-   * @param {string} error - Error message
+   * @param {Error|string} error - Error object or message
    * @param {string} step - Step where error occurred
+   * @param {Object} extra - Extra error data to include
    */
-  error(error, step = '') {
+  error(error, step = '', extra = null) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     const data = {
-      step: step || this.currentStep,
+      step: 'error',
       percent: this.currentPercent,
-      error: error.message || error,
-      detail: this.currentDetail
+      error: errorMessage,
+      detail: step || this.currentStep,
+      ...(extra || {})
     };
 
     this.res.write(`event: error\n`);

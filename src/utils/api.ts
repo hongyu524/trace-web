@@ -1,59 +1,46 @@
-/**
- * API base URL configuration
- * Uses VITE_API_BASE_URL from environment, falls back to http://localhost:3001
- */
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
+const API_BASE = ""; // Use Vite proxy in dev, relative URLs in prod
 
-// Debug: Log API base URL in development
-if (import.meta.env.DEV) {
-  console.log('[API] API_BASE_URL:', API_BASE_URL);
-  console.log('[API] VITE_API_BASE_URL from env:', import.meta.env.VITE_API_BASE_URL);
-}
+export type SignedUrlPayload = {
+  signedUrl: string | null;
+  cdnUrl: string | null;
+  s3SignedUrl: string | null;
+  preferred: string | null;
+  resourcePath: string | null;
+};
 
-/**
- * Helper to build API endpoint URLs
- */
-export function apiUrl(endpoint: string): string {
-  // Remove leading slash if present to avoid double slashes
-  const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
-  const url = `${API_BASE_URL}/${cleanEndpoint}`;
-  
-  // Debug: Log constructed URL in development
-  if (import.meta.env.DEV) {
-    console.log(`[API] apiUrl('${endpoint}') -> ${url}`);
+export async function fetchSignedVideoPayload(path: string, prefer?: string): Promise<SignedUrlPayload> {
+  const params = new URLSearchParams({ path });
+  if (prefer) params.set('prefer', prefer);
+  const resp = await fetch(`${API_BASE}/api/media/signed-url?${params.toString()}`);
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Failed to fetch signed URL (${resp.status}): ${text}`);
   }
-  
-  return url;
-}
-
-/**
- * Fetch a signed CloudFront URL for a protected video path.
- * Expects resourcePath to start with /videos/.
- */
-export async function fetchSignedVideoUrl(resourcePath: string): Promise<string> {
-  if (typeof resourcePath !== 'string' || !resourcePath.startsWith('/videos/')) {
-    throw new Error('resourcePath must start with /videos/');
-  }
-
-  const endpoint = apiUrl(`api/media/signed-url?path=${encodeURIComponent(resourcePath)}`);
-  const res = await fetch(endpoint);
-
-  if (!res.ok) {
-    let detail = `HTTP ${res.status}`;
-    try {
-      const data = await res.json();
-      detail = data?.error || data?.message || detail;
-    } catch {
-      // ignore JSON parse errors
-    }
-    throw new Error(detail);
-  }
-
-  const data = await res.json();
-  if (!data?.signedUrl || typeof data.signedUrl !== 'string') {
+  const data = await resp.json();
+  const signedUrl = data?.signedUrl ?? data?.s3SignedUrl ?? data?.cdnUrl ?? null;
+  if (!signedUrl) {
     throw new Error('signedUrl missing from response');
   }
+  return {
+    signedUrl,
+    cdnUrl: data?.cdnUrl ?? null,
+    s3SignedUrl: data?.s3SignedUrl ?? null,
+    preferred: data?.preferred ?? null,
+    resourcePath: data?.resourcePath ?? null,
+  };
+}
 
-  return data.signedUrl as string;
+export async function fetchPlaybackUrl(key: string): Promise<string> {
+  const params = new URLSearchParams({ key });
+  const resp = await fetch(`${API_BASE}/api/media/playback-url?${params.toString()}`);
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Failed to fetch playback URL (${resp.status}): ${text}`);
+  }
+  const data = await resp.json();
+  if (!data?.playbackUrl) {
+    throw new Error('Playback URL missing in response');
+  }
+  return data.playbackUrl as string;
 }
 
