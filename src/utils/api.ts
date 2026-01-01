@@ -1,4 +1,4 @@
-const API_BASE = ""; // Use Vite proxy in dev, relative URLs in prod
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
 
 export type SignedUrlPayload = {
   signedUrl: string | null;

@@ -77,7 +77,8 @@ export default function UploadFlow() {
       );
 
       // Use fetch with streaming response for SSE progress updates
-      const response = await fetch("/api/create-memory?stream=true", {
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
+      const response = await fetch(`${API_BASE}/api/create-memory?stream=true`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -1,16 +1,17 @@
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
+# Dependencies
 node_modules
+
+# Build outputs
 dist
 dist-ssr
 *.local
 
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
 .vscode/*
 !.vscode/extensions.json
 .idea
@@ -20,8 +21,48 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-.env
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Backend/server (excluded from frontend repo)
+server/
 secrets/
 *.pem
-
 ADD_API_KEY.txt
+
+# Backend documentation and test files
+AWS_*.md
+CLOUDFRONT_*.md
+ENDPOINT_*.md
+FINAL_*.md
+FIX_*.md
+FRONTEND_CHANGES_*.md
+IMMEDIATE_*.md
+MUSIC_*.md
+PRODUCTION_*.md
+S3_*.md
+SETUP_*.md
+SIGNED_*.md
+TEST_*.md
+TESTING_*.md
+VERIFY_*.md
+_local_secrets_backup/
+Z_API/
+*_test.txt
+perm_test.txt
+s3_test.txt
+scripts/list-routes.js
+
+# Generated files
+*.mp4
+*.mov
+*.webm
+outputs/
+tmp/
