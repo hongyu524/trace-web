@@ -49,7 +49,7 @@ const HOST = "0.0.0.0";
 
 // Log server configuration at startup
 console.log('[SERVER] Configuration:');
-console.log(`[SERVER]   PORT: ${PORT} (from process.env.PORT: ${process.env.PORT || 'not set, using default 3001'})`);
+console.log(`[SERVER]   PORT: ${PORT} (from process.env.PORT: ${process.env.PORT || 'not set, using default 8080'})`);
 console.log(`[SERVER]   HOST: ${HOST} (binding to all interfaces for Railway)`);
 console.log(`[SERVER]   NODE_ENV: ${process.env.NODE_ENV || 'not set'}`);
 
