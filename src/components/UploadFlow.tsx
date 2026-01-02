@@ -78,7 +78,7 @@ export default function UploadFlow() {
         })
       );
 
-      // Step 1: Get optimal image ordering from OpenAI via Vercel /api/sequence
+      // Step 1: Get optimal image ordering from OpenAI via Railway backend /api/sequence
       setProgress({ percent: 10, step: "analyzing", detail: "Determining optimal image sequence..." });
       
       const sequenceImages: SequenceImage[] = imageData.map(img => ({
