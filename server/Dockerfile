@@ -1,4 +1,9 @@
-﻿FROM node:20-bullseye
+﻿# ⚠️ NOT USED BY RAILWAY - DO NOT CONFIGURE RAILWAY TO USE THIS FILE ⚠️
+# This file is kept for reference only. Railway uses the root-level Dockerfile.
+# Pattern A: Railway rootDirectory = "." (repo root), dockerfilePath = "Dockerfile" (root)
+# If you see this comment, Railway is misconfigured. Use root Dockerfile instead.
+
+FROM node:20-bullseye
 
 # Make apt more reliable in CI/build environments
 RUN set -eux; \

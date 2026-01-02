@@ -46,13 +46,16 @@ server/metadata/
 !server/Dockerfile
 !server/templates/
 !server/utils/
+# Note: server/Dockerfile is kept for reference but NOT used by Railway
+# Railway uses root Dockerfile (Pattern A: rootDirectory = ".", dockerfilePath = "Dockerfile")
 secrets/
 *.pem
 ADD_API_KEY.txt
 
-# Backend documentation and test files (keep only README.md)
+# Backend documentation and test files (keep essential docs)
 *.md
 !README.md
+!DEPLOY_RAILWAY.md
 _local_secrets_backup/
 Z_API/
 *_test.txt

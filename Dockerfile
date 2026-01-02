@@ -1,6 +1,7 @@
 # Root-level Dockerfile for Railway Pattern A
-# Builds the backend from server/ directory
-# This Dockerfile sets the build context to server/ and delegates to server/Dockerfile
+# Build context: Repository root (.)
+# This Dockerfile copies from server/ directory into container
+# Railway uses this Dockerfile with rootDirectory = "." (repo root)
 
 FROM node:20-bullseye
 
