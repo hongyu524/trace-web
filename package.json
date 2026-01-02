@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20 <23"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -12,7 +15,6 @@
   },
   "dependencies": {
     "lucide-react": "^0.344.0",
-    "openai": "^6.15.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

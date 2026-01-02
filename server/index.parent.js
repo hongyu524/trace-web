@@ -197,10 +197,22 @@ async function uploadFinalVideoToS3(rawPath, filename, musicTrack = null) {
 }
 
 // Middleware
-// CORS: Allow all origins (can be restricted to Vercel domain in production)
-// TODO: Restrict to Vercel domain: origin: process.env.VERCEL_URL || 'https://tracememory.store'
+// CORS: Allow Vercel domain and development origins
+const allowedOrigins = [
+  'https://tracememory.store',
+  'https://www.tracememory.store',
+  ...(process.env.NODE_ENV === 'development' ? ['http://localhost:5173', 'http://localhost:3000'] : [])
+];
 app.use(cors({
-  origin: true, // Allow all origins for now
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 app.use(express.json({ limit: '300mb' }));
@@ -3148,11 +3160,9 @@ app.get('/api/health', async (req, res) => {
     ok: true,
     build: BUILD_STAMP,
     port: PORT,
-    openaiKeyLoaded: false, // OpenAI removed from Railway
     ffmpegAvailable,
     ffmpegPath,
     ffmpegVersion,
-    model: null, // OpenAI removed from Railway
     directories: {
       tmp: tmpDir,
       outputs: outputsDir,

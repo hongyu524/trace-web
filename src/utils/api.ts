@@ -51,8 +51,35 @@ export type SequenceImage = {
 };
 
 /**
+ * Analyze images using OpenAI Vision API
+ * Calls Vercel serverless function /api/vision (same-origin)
+ */
+export async function analyzeImages(
+  images: SequenceImage[]
+): Promise<any[]> {
+  console.log('[API] Calling Vercel /api/vision (same-origin)');
+  const response = await fetch('/api/vision', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      images,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Failed to analyze images' }));
+    throw new Error(errorData.error || `Vision API error (${response.status})`);
+  }
+
+  const data = await response.json();
+  return Array.isArray(data.analyses) ? data.analyses : [];
+}
+
+/**
  * Get optimal image ordering from OpenAI
- * Calls Railway backend /api/sequence endpoint
+ * Calls Vercel serverless function /api/sequence (same-origin)
  */
 export async function getImageSequence(
   images: SequenceImage[],
@@ -60,7 +87,8 @@ export async function getImageSequence(
   aspectRatio?: string,
   frameRate?: number
 ): Promise<SequenceResponse> {
-  const response = await fetch(`${API_BASE}/api/sequence`, {
+  console.log('[API] Calling Vercel /api/sequence (same-origin)');
+  const response = await fetch('/api/sequence', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -83,6 +111,7 @@ export async function getImageSequence(
 }
 
 export async function fetchSignedVideoPayload(path: string, prefer?: string): Promise<SignedUrlPayload> {
+  console.log('[API] Calling Railway backend for signed URL:', `${API_BASE}/api/media/signed-url`);
   const params = new URLSearchParams({ path });
   if (prefer) params.set('prefer', prefer);
   const resp = await fetch(`${API_BASE}/api/media/signed-url?${params.toString()}`);
@@ -105,6 +134,7 @@ export async function fetchSignedVideoPayload(path: string, prefer?: string): Pr
 }
 
 export async function fetchPlaybackUrl(key: string): Promise<string> {
+  console.log('[API] Calling Railway backend for playback URL:', `${API_BASE}/api/media/playback-url`);
   const params = new URLSearchParams({ key });
   const resp = await fetch(`${API_BASE}/api/media/playback-url?${params.toString()}`);
   if (!resp.ok) {
@@ -117,4 +147,3 @@ export async function fetchPlaybackUrl(key: string): Promise<string> {
   }
   return data.playbackUrl as string;
 }
-
