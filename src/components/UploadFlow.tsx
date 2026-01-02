@@ -120,7 +120,7 @@ export default function UploadFlow() {
       setProgress({ percent: 30, step: "rendering", detail: "Creating your memory video..." });
 
       // Use fetch with streaming response for SSE progress updates
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "http://localhost:8080" : "");
       const response = await fetch(`${API_BASE}/api/create-memory?stream=true`, {
         method: "POST",
         headers: {
