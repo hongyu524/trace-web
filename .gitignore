@@ -31,28 +31,28 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Backend/server (excluded from frontend repo)
-server/
+# Backend/server - exclude runtime artifacts but allow source files
+server/node_modules/
+server/.env
+server/.env.local
+server/generated/
+server/outputs/
+server/tmp/
+server/uploads/
+server/metadata/
+# Allow essential server source files to be tracked
+!server/*.js
+!server/*.json
+!server/Dockerfile
+!server/templates/
+!server/utils/
 secrets/
 *.pem
 ADD_API_KEY.txt
 
-# Backend documentation and test files
-AWS_*.md
-CLOUDFRONT_*.md
-ENDPOINT_*.md
-FINAL_*.md
-FIX_*.md
-FRONTEND_CHANGES_*.md
-IMMEDIATE_*.md
-MUSIC_*.md
-PRODUCTION_*.md
-S3_*.md
-SETUP_*.md
-SIGNED_*.md
-TEST_*.md
-TESTING_*.md
-VERIFY_*.md
+# Backend documentation and test files (keep only README.md)
+*.md
+!README.md
 _local_secrets_backup/
 Z_API/
 *_test.txt
@@ -64,5 +64,4 @@ scripts/list-routes.js
 *.mp4
 *.mov
 *.webm
-outputs/
-tmp/
+# Runtime artifacts (already covered by server/ paths above)

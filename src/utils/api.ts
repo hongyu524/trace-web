@@ -1,8 +1,33 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
-// Vercel API base - for OpenAI endpoints (sequence, vision)
-const VERCEL_API_BASE = typeof window !== 'undefined' 
-  ? window.location.origin 
-  : 'https://tracememory.store';
+// Railway backend API base URL (set in Vercel environment variables)
+// In production, this MUST be set or API calls will fail
+// In development, falls back to localhost:8080 if not set
+const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "http://localhost:8080" : "");
+
+// Production validation: ensure VITE_API_BASE_URL is set
+if (import.meta.env.PROD && !API_BASE) {
+  const errorMsg = 'VITE_API_BASE_URL is not set in production. Please configure it in Vercel environment variables.';
+  console.error('[API] FATAL:', errorMsg);
+  
+  // Show error in UI if possible
+  if (typeof window !== 'undefined') {
+    document.body.innerHTML = `
+      <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: system-ui; padding: 2rem;">
+        <div style="max-width: 600px; text-align: center;">
+          <h1 style="color: #ef4444; margin-bottom: 1rem;">Configuration Error</h1>
+          <p style="color: #6b7280; margin-bottom: 0.5rem;">${errorMsg}</p>
+          <p style="color: #9ca3af; font-size: 0.875rem;">Please contact the administrator.</p>
+        </div>
+      </div>
+    `;
+  }
+  
+  throw new Error(errorMsg);
+}
+
+// Diagnostics: log API_BASE at runtime (non-secret, for debugging)
+if (typeof window !== 'undefined') {
+  console.log('[API] Railway backend API_BASE:', API_BASE || '(not set)');
+}
 
 export type SignedUrlPayload = {
   signedUrl: string | null;
@@ -27,7 +52,7 @@ export type SequenceImage = {
 
 /**
  * Get optimal image ordering from OpenAI
- * Calls Vercel serverless function /api/sequence
+ * Calls Railway backend /api/sequence endpoint
  */
 export async function getImageSequence(
   images: SequenceImage[],
@@ -35,7 +60,7 @@ export async function getImageSequence(
   aspectRatio?: string,
   frameRate?: number
 ): Promise<SequenceResponse> {
-  const response = await fetch(`${VERCEL_API_BASE}/api/sequence`, {
+  const response = await fetch(`${API_BASE}/api/sequence`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
