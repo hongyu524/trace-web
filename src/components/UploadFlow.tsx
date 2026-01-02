@@ -1,5 +1,6 @@
 ﻿import { useState } from "react";
 import VideoPreview from "./VideoPreview";
+import { getImageSequence, type SequenceImage } from "../utils/api";
 
 export default function UploadFlow() {
   const [files, setFiles] = useState<File[]>([]);
@@ -56,10 +57,10 @@ export default function UploadFlow() {
     setProgress(null); // Reset progress on new submission
 
     try {
-      // Convert files to base64
-      const photos = await Promise.all(
-        files.map(async (file) => {
-          return new Promise<{ data: string; filename: string; mimeType: string }>((resolve, reject) => {
+      // Convert files to base64 for sequence analysis
+      const imageData = await Promise.all(
+        files.map(async (file, index) => {
+          return new Promise<{ data: string; filename: string; mimeType: string; id: string }>((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = () => {
               const base64 = reader.result as string;
@@ -68,6 +69,7 @@ export default function UploadFlow() {
                 data: base64Data,
                 filename: file.name,
                 mimeType: file.type,
+                id: String(index),
               });
             };
             reader.onerror = reject;
@@ -75,6 +77,47 @@ export default function UploadFlow() {
           });
         })
       );
+
+      // Step 1: Get optimal image ordering from OpenAI via Vercel /api/sequence
+      setProgress({ percent: 10, step: "analyzing", detail: "Determining optimal image sequence..." });
+      
+      const sequenceImages: SequenceImage[] = imageData.map(img => ({
+        id: img.id,
+        base64: img.data,
+        mimeType: img.mimeType,
+      }));
+
+      let optimalOrder: number[];
+      try {
+        const sequenceResponse = await getImageSequence(
+          sequenceImages,
+          promptText.trim() || undefined,
+          outputRatio,
+          fps
+        );
+        optimalOrder = sequenceResponse.order;
+        console.log('[UploadFlow] Sequence ordering received:', optimalOrder);
+        if (sequenceResponse.rationale) {
+          console.log('[UploadFlow] Sequence rationale:', sequenceResponse.rationale);
+        }
+      } catch (seqError: any) {
+        console.warn('[UploadFlow] Sequence API failed, using original order:', seqError.message);
+        // Fallback to original order if sequence API fails
+        optimalOrder = Array.from({ length: files.length }, (_, i) => i);
+      }
+
+      // Step 2: Reorder images based on optimal sequence
+      const reorderedData = optimalOrder.map(index => imageData[index]);
+      
+      // Convert to format expected by Railway backend
+      const photos = reorderedData.map(img => ({
+        data: img.data,
+        filename: img.filename,
+        mimeType: img.mimeType,
+      }));
+
+      // Step 3: Send ordered photos to Railway backend for video rendering
+      setProgress({ percent: 30, step: "rendering", detail: "Creating your memory video..." });
 
       // Use fetch with streaming response for SSE progress updates
       const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";

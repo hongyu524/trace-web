@@ -1,12 +1,18 @@
 /**
  * Vercel Serverless Function: Sequence Planning
- * Creates global narrative sequence using vision analysis results
+ * Analyzes uploaded images and returns the best ordered sequence
+ * Uses OpenAI Responses API (/v1/responses) - server-side only
  * 
  * POST /api/sequence
- * Body: { analysisResults: Array, promptText?: string }
+ * Body: {
+ *   context?: string,
+ *   aspectRatio?: string,
+ *   frameRate?: number,
+ *   images: Array<{ id: string, url?: string, base64?: string, mimeType?: string }>
+ * }
  */
 
-import OpenAI from 'openai';
+export const runtime = "nodejs";
 
 // Rate limiting: Simple in-memory store (for production, use Redis/Upstash)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -33,55 +39,6 @@ function checkRateLimit(ip: string | null): { allowed: boolean; remaining: numbe
 
   record.count++;
   return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - record.count };
-}
-
-/**
- * Safe JSON parsing with fallback
- */
-function safeParseJSON(jsonString: string, fallback: any): any {
-  try {
-    // Remove markdown code blocks if present
-    const cleaned = jsonString.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    return JSON.parse(cleaned);
-  } catch (error) {
-    console.error('[SEQUENCE] JSON parse error:', error instanceof Error ? error.message : String(error));
-    return fallback;
-  }
-}
-
-/**
- * Validate that selected IDs match expected count and use only provided IDs
- */
-function isValidSelection(orderedIds: string[], images: any[], targetCount: number): boolean {
-  if (!Array.isArray(orderedIds) || orderedIds.length !== targetCount) {
-    return false;
-  }
-  
-  const imageIdSet = new Set(images.map(img => String(img.id ?? img.filename ?? images.indexOf(img))));
-  return orderedIds.every(id => imageIdSet.has(String(id)));
-}
-
-/**
- * Deterministic fallback: return images in original order
- */
-function deterministicFallback(images: any[], targetCount: number): string[] {
-  return images.slice(0, targetCount).map((img, idx) => String(img.id ?? img.filename ?? idx));
-}
-
-/**
- * Build shots array from ordered IDs and beats
- */
-function buildShots(orderedIds: string[], beats: any[]): any[] {
-  return orderedIds.map((id, idx) => {
-    const beat = beats.find(b => String(b.id) === String(id));
-    return {
-      id,
-      role: beat?.role || (idx < orderedIds.length * 0.2 ? 'opening' : 
-                          idx < orderedIds.length * 0.6 ? 'build' : 
-                          idx < orderedIds.length * 0.9 ? 'turn' : 'resolution'),
-      reason: beat?.reason || ''
-    };
-  });
 }
 
 export default async function handler(req: Request): Promise<Response> {
@@ -117,181 +74,186 @@ export default async function handler(req: Request): Promise<Response> {
     // Input validation
     const body = await req.json();
     
-    if (!body.analysisResults || !Array.isArray(body.analysisResults)) {
-      return new Response(JSON.stringify({ error: 'analysisResults array required' }), {
+    if (!body.images || !Array.isArray(body.images)) {
+      return new Response(JSON.stringify({ error: 'images array required' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    if (body.analysisResults.length === 0) {
-      return new Response(JSON.stringify({ error: 'analysisResults array cannot be empty' }), {
+    if (body.images.length === 0) {
+      return new Response(JSON.stringify({ error: 'images array cannot be empty' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    // Cap batch size to prevent abuse
-    const MAX_IMAGES = 200;
-    if (body.analysisResults.length > MAX_IMAGES) {
-      return new Response(JSON.stringify({ 
-        error: `Too many images (max ${MAX_IMAGES})` 
-      }), {
+    // Limit number of images
+    if (body.images.length > 36) {
+      return new Response(JSON.stringify({ error: 'Too many images (max 36)' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    const promptText = typeof body.promptText === 'string' ? body.promptText.trim() : '';
+    if (body.images.length < 6) {
+      return new Response(JSON.stringify({ error: 'Too few images (min 6)' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
 
     // Validate API key
     const apiKey = process.env.OPENAI_API_KEY;
+    const hasApiKey = !!apiKey;
+    console.log('[SEQUENCE] OPENAI_API_KEY exists:', hasApiKey);
+    
     if (!apiKey) {
-      console.error('[SEQUENCE] OPENAI_API_KEY not set');
-      return new Response(JSON.stringify({ error: 'Server configuration error' }), {
+      console.error('[SEQUENCE] OPENAI_API_KEY is not set');
+      return new Response(JSON.stringify({ error: 'OPENAI_API_KEY is not set' }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    // Get model (support OPENAI_SEQUENCE_MODEL or fallback to OPENAI_MODEL or default)
-    // Responses API compatible models: gpt-4.1-mini, gpt-4.1
-    const modelName = process.env.OPENAI_SEQUENCE_MODEL || process.env.OPENAI_MODEL || 'gpt-4.1-mini';
+    const context = typeof body.context === 'string' ? body.context.trim() : '';
+    const aspectRatio = body.aspectRatio || '16:9';
+    const frameRate = typeof body.frameRate === 'number' ? body.frameRate : 24;
 
-    // Initialize OpenAI client
-    const openai = new OpenAI({ apiKey });
-
-    // Normalize analysis results to image format and create compact representation
-    const images = body.analysisResults.map((a: any, idx: number) => ({
-      id: String(a.id ?? a.filename ?? idx),
-      filename: a.filename || `image_${idx}`,
-      analysis: {
-        subject: a.subject || a.caption || '',
-        mood: Array.isArray(a.mood) ? a.mood : [],
-        composition: a.composition || {},
-        visual_energy: Number(a.visual_energy ?? a.visualWeight ?? 5) || 5,
-        best_role: Array.isArray(a.best_role) ? a.best_role : []
+    // Build image content for OpenAI
+    const imageContents = body.images.map((img: any, idx: number) => {
+      let imageUrl: string;
+      if (img.url) {
+        imageUrl = img.url;
+      } else if (img.base64) {
+        const mimeType = img.mimeType || 'image/jpeg';
+        imageUrl = `data:${mimeType};base64,${img.base64}`;
+      } else {
+        throw new Error(`Image ${idx} (id: ${img.id}) must have either url or base64`);
       }
-    }));
-
-    // Create compact input to reduce token usage
-    const compact = images.map(i => ({
-      id: i.id,
-      subject: i.analysis?.subject,
-      mood: i.analysis?.mood,
-      composition: i.analysis?.composition,
-      visual_energy: i.analysis?.visual_energy,
-      best_role: i.analysis?.best_role
-    }));
-
-    const targetCount = images.length;
-
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
       
-      // Build the prompt for Responses API
-      const systemPrompt = `You are a professional video editor creating a cinematic memory video sequence plan.
+      return {
+        type: 'input_image',
+        image_url: imageUrl
+      };
+    });
 
-Your task is to order ALL provided images into a story (no omissions).
+    // Build prompt
+    const systemPrompt = `You are a professional photo editor and film story editor. Your job is to analyze a set of images and produce the best cinematic ordering for a memory video.
 
-OUTPUT FORMAT (JSON only):
+OUTPUT FORMAT (JSON only, no markdown):
 {
-  "orderedIds": ["idA", "idB", ...],
-  "theme": "brief theme description",
-  "emotion_arc": [{"beat": "opening|build|turn|climax|resolution", "ids": ["idA", "idB"]}],
-  "beats": [
-    { "id": "idA", "role": "opening|build|turn|climax|resolution", "reason": "brief why" }
-  ]
+  "order": [0, 1, 2, ...],  // Array of indices representing the optimal sequence
+  "beats": ["opening", "build", "turn", "climax", "ending"],  // Optional: narrative beats
+  "rationale": "Brief explanation of the ordering choice"
 }
 
-HARD CONSTRAINTS:
-1) Use only provided ids.
-2) Return exactly ALL ids (orderedIds.length == images.length).
-3) Each id appears exactly once.
-4) Avoid near-duplicate adjacency (similar tags/composition).
-5) Do NOT preserve upload order unless it is already the absolute best story.
+RULES:
+- Return "order" as an array of indices [0, 1, 2, ..., n-1] where n is the number of images
+- Each index must appear exactly once
+- Order should create the best cinematic narrative flow
+- Consider visual composition, mood transitions, and storytelling arc`;
 
-Return valid JSON only, no markdown, no code fences.`;
+    const userPrompt = `Context: ${context || '(none)'}
+Aspect Ratio: ${aspectRatio}
+Frame Rate: ${frameRate} fps
 
-      const userPrompt = `Order ALL images for a story (do NOT drop any).
-User prompt: ${promptText || '(none)'}
-images = ${JSON.stringify(compact)}
+Analyze these ${body.images.length} images and determine the optimal cinematic ordering.
+Return ONLY valid JSON with keys: order (array of indices), beats (optional array), rationale (optional string).`;
 
-Return orderedIds containing every id exactly once (length == images.length) and beats with roles (opening/build/turn/climax/resolution).`;
-
-      // Use Responses API
-      const response = await (openai as any).responses.create({
-        model: modelName,
-        input: [
-          {
-            role: 'system',
-            content: [{ type: 'input_text', text: systemPrompt }]
-          },
-          {
-            role: 'user',
-            content: [{ type: 'input_text', text: userPrompt }]
-          }
-        ],
-        max_output_tokens: 1200,
-        temperature: 0.4
-      }, {
+    // Call OpenAI Responses API
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout
+    
+    try {
+      const r = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4.1-mini",
+          input: [
+            {
+              role: "system",
+              content: [{ type: "input_text", text: systemPrompt }]
+            },
+            {
+              role: "user",
+              content: [
+                { type: "input_text", text: userPrompt },
+                ...imageContents
+              ]
+            }
+          ],
+          max_output_tokens: 800,
+        }),
         signal: controller.signal
       });
-      
+
       clearTimeout(timeout);
       
-      // Responses API returns output_text instead of choices[0].message.content
-      const content = (response.output_text || response.output || '').trim();
+      console.log('[SEQUENCE] OpenAI response status:', r.status);
       
-      // Safe JSON parsing with fallback
-      const fallbackPlan = {
-        orderedIds: deterministicFallback(images, targetCount),
-        theme: '',
-        emotion_arc: [],
-        beats: []
-      };
-      const raw = safeParseJSON(content, fallbackPlan);
+      const json = await r.json();
       
-      const selectedOrderedIds = raw.orderedIds || raw.ordered_ids || [];
-      const beats = Array.isArray(raw.beats) ? raw.beats : [];
-      const theme = raw.theme || '';
-      const emotion_arc = Array.isArray(raw.emotion_arc) ? raw.emotion_arc : [];
-      
-      const valid = isValidSelection(selectedOrderedIds, images, targetCount);
-      
-      let finalIds = selectedOrderedIds;
-      if (!valid) {
-        console.warn('[SEQUENCE] Model output invalid, using deterministic fallback');
-        finalIds = deterministicFallback(images, targetCount);
+      if (!r.ok) {
+        console.error('[SEQUENCE] OpenAI API error:', r.status, JSON.stringify(json).substring(0, 200));
+        return new Response(JSON.stringify({ 
+          error: "OpenAI auth failed", 
+          openaiStatus: r.status, 
+          openaiBody: json 
+        }), {
+          status: 502,
+          headers: { 'Content-Type': 'application/json' }
+        });
       }
-      
-      // Build shots from beats
-      const shots = buildShots(finalIds, beats);
-      
-      // Map ids to original image indices
-      const orderedIdsStr = finalIds.map(id => String(id));
-      const selectedIndices = orderedIdsStr.map(id => {
-        const idx = images.findIndex(img => String(img.id) === String(id));
-        return idx >= 0 ? idx : 0;
-      });
 
-      // Build plan compatible with renderer/motion pipeline
-      const plan = {
-        theme,
-        emotion_arc,
-        ordered_ids: orderedIdsStr,
-        shots,
-        selected: selectedIndices,
-        order: Array.from({ length: orderedIdsStr.length }, (_, i) => i),
-        durations: Array.from({ length: orderedIdsStr.length }, () => 3.8),
-        transitions: Array.from({ length: Math.max(0, orderedIdsStr.length - 1) }, () => 'crossfade'),
-        usedPlanner: 'ai'
-      };
+      const text = json.output_text || json.output || '';
+      console.log('[SEQUENCE] OpenAI response text length:', text.length);
 
-      return new Response(JSON.stringify({ 
-        ok: true, 
-        plan
+      // Parse JSON response
+      let parsed: any;
+      try {
+        // Remove markdown code blocks if present
+        const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        parsed = JSON.parse(cleaned);
+      } catch (parseError) {
+        console.error('[SEQUENCE] JSON parse error:', parseError);
+        console.error('[SEQUENCE] Response text snippet:', text.substring(0, 500));
+        return new Response(JSON.stringify({ 
+          error: 'Failed to parse OpenAI response as JSON',
+          responseSnippet: text.substring(0, 500)
+        }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Validate order array
+      if (!Array.isArray(parsed.order)) {
+        return new Response(JSON.stringify({ error: 'Response missing valid "order" array' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Ensure order contains all indices exactly once
+      const expectedIndices = Array.from({ length: body.images.length }, (_, i) => i);
+      const orderSet = new Set(parsed.order);
+      const hasAllIndices = expectedIndices.every(i => orderSet.has(i)) && parsed.order.length === body.images.length;
+      
+      if (!hasAllIndices) {
+        console.warn('[SEQUENCE] Order validation failed, using fallback');
+        parsed.order = expectedIndices; // Fallback to original order
+      }
+
+      // Return response
+      return new Response(JSON.stringify({
+        order: parsed.order,
+        beats: Array.isArray(parsed.beats) ? parsed.beats : undefined,
+        rationale: typeof parsed.rationale === 'string' ? parsed.rationale : undefined
       }), {
         status: 200,
         headers: { 
@@ -301,55 +263,18 @@ Return orderedIds containing every id exactly once (length == images.length) and
       });
 
     } catch (error: any) {
+      clearTimeout(timeout);
+      
       if (error.name === 'AbortError') {
-        console.warn('[SEQUENCE] Request timed out, using deterministic fallback');
-        // Return deterministic fallback on timeout
-        const fallbackIds = deterministicFallback(images, targetCount);
-        const fallbackShots = buildShots(fallbackIds, []);
-        
-        return new Response(JSON.stringify({ 
-          ok: true,
-          plan: {
-            theme: '',
-            emotion_arc: [],
-            ordered_ids: fallbackIds,
-            shots: fallbackShots,
-            selected: Array.from({ length: fallbackIds.length }, (_, i) => i),
-            order: Array.from({ length: fallbackIds.length }, (_, i) => i),
-            durations: Array.from({ length: fallbackIds.length }, () => 3.8),
-            transitions: Array.from({ length: Math.max(0, fallbackIds.length - 1) }, () => 'crossfade'),
-            usedPlanner: 'fallback'
-          }
-        }), {
-          status: 200,
+        console.error('[SEQUENCE] Request timed out');
+        return new Response(JSON.stringify({ error: 'Request timed out' }), {
+          status: 504,
           headers: { 'Content-Type': 'application/json' }
         });
       }
       
-      console.error('[SEQUENCE] Error:', error);
-      
-      // Return deterministic fallback on error
-      const fallbackIds = deterministicFallback(images, targetCount);
-      const fallbackShots = buildShots(fallbackIds, []);
-      
-      return new Response(JSON.stringify({ 
-        ok: true,
-        plan: {
-          theme: '',
-          emotion_arc: [],
-          ordered_ids: fallbackIds,
-          shots: fallbackShots,
-          selected: Array.from({ length: fallbackIds.length }, (_, i) => i),
-          order: Array.from({ length: fallbackIds.length }, (_, i) => i),
-          durations: Array.from({ length: fallbackIds.length }, () => 3.8),
-          transitions: Array.from({ length: Math.max(0, fallbackIds.length - 1) }, () => 'crossfade'),
-          usedPlanner: 'fallback',
-          error: error.message
-        }
-      }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      console.error('[SEQUENCE] Error calling OpenAI:', error);
+      throw error;
     }
 
   } catch (error: any) {
