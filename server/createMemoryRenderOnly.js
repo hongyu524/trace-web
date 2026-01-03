@@ -453,13 +453,19 @@ async function createMemoryRenderOnly(req, res) {
       enableMusic = true,
     } = req.body || {};
 
+    // Comprehensive logging at handler start
+    console.log('[CREATE_MEMORY] ========================================');
+    console.log('[CREATE_MEMORY] BACKEND_HANDLER_START');
+    console.log('[CREATE_MEMORY] received photoKeys.length =', Array.isArray(photoKeys) ? photoKeys.length : 'not-array');
+    console.log('[CREATE_MEMORY] received photoKeys.first3 =', Array.isArray(photoKeys) ? photoKeys.slice(0, 3) : null);
+    console.log('[CREATE_MEMORY] received photoKeys.last3 =', Array.isArray(photoKeys) ? photoKeys.slice(-3) : null);
     console.log('[CREATE_MEMORY] received aspectRatio =', rawAspectRatio);
     console.log('[CREATE_MEMORY] received fps =', rawFps);
     console.log('[CREATE_MEMORY] received frameRate =', rawFrameRate);
-
-    console.log('[IMAGES] receivedKeys=', Array.isArray(photoKeys) ? photoKeys.length : 'not-array');
-    console.log('[IMAGES] first3Keys=', Array.isArray(photoKeys) ? photoKeys.slice(0, 3) : null);
-    console.log('[IMAGES] last3Keys=', Array.isArray(photoKeys) ? photoKeys.slice(-3) : null);
+    console.log('[CREATE_MEMORY] received order.length =', Array.isArray(order) ? order.length : 'not-array');
+    console.log('[CREATE_MEMORY] received order.first5 =', Array.isArray(order) ? order.slice(0, 5) : null);
+    console.log('[CREATE_MEMORY] received order.last5 =', Array.isArray(order) ? order.slice(-5) : null);
+    console.log('[CREATE_MEMORY] received context.length =', String(context || '').length);
 
     // Normalize aspectRatio and fps
     const aspectRatio = normalizeAspectRatio(rawAspectRatio);
