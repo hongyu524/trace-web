@@ -668,37 +668,38 @@ async function createMemoryRenderOnly(req, res) {
     // Validate output with ffprobe
     console.log(`[CREATE_MEMORY] ========================================`);
     console.log(`[CREATE_MEMORY] OUTPUT_VALIDATION_START`);
-    const N = orderedKeys.length;
-    const xfade = 0.35;
-    const targetDuration = Math.max(12, Math.min(30, N * 1.7));
-    const expectedMinDuration = targetDuration - 0.5;
+    const outputN = orderedKeys.length;
+    const outputXfade = 0.35;
+    const outputTargetDuration = Math.max(12, Math.min(30, outputN * 1.7));
+    const expectedMinDuration = outputTargetDuration - 0.5;
     
     // Fail if duration is too short (especially for 9 images)
     if (videoDuration < expectedMinDuration) {
-      console.error(`[CREATE_MEMORY] OUTPUT_VALIDATION_FAILED: videoDuration=${videoDuration.toFixed(2)}s < expectedMin=${expectedMinDuration.toFixed(2)}s for N=${N}`);
-      return jsonError(res, 500, 'OUTPUT_DURATION_TOO_SHORT', `Video duration ${videoDuration.toFixed(2)}s is too short for ${N} images (expected >= ${expectedMinDuration.toFixed(2)}s)`, {
+      console.error(`[CREATE_MEMORY] OUTPUT_VALIDATION_FAILED: videoDuration=${videoDuration.toFixed(2)}s < expectedMin=${expectedMinDuration.toFixed(2)}s for N=${outputN}`);
+      return jsonError(res, 500, 'OUTPUT_DURATION_TOO_SHORT', `Video duration ${videoDuration.toFixed(2)}s is too short for ${outputN} images (expected >= ${expectedMinDuration.toFixed(2)}s)`, {
         ok: false,
         error: 'OUTPUT_DURATION_TOO_SHORT',
         videoDuration: videoDuration,
         expectedMinDuration: expectedMinDuration,
-        imageCount: N,
+        imageCount: outputN,
       });
     }
     
     // Additional check: for 9 images, duration must be >= 10s
-    if (N >= 9 && videoDuration < 10) {
-      console.error(`[CREATE_MEMORY] OUTPUT_VALIDATION_FAILED: videoDuration=${videoDuration.toFixed(2)}s < 10s for N=${N}`);
-      return jsonError(res, 500, 'OUTPUT_DURATION_TOO_SHORT', `Video duration ${videoDuration.toFixed(2)}s is too short for ${N} images (must be >= 10s)`, {
+    if (outputN >= 9 && videoDuration < 10) {
+      console.error(`[CREATE_MEMORY] OUTPUT_VALIDATION_FAILED: videoDuration=${videoDuration.toFixed(2)}s < 10s for N=${outputN}`);
+      return jsonError(res, 500, 'OUTPUT_DURATION_TOO_SHORT', `Video duration ${videoDuration.toFixed(2)}s is too short for ${outputN} images (must be >= 10s)`, {
         ok: false,
         error: 'OUTPUT_DURATION_TOO_SHORT',
         videoDuration: videoDuration,
-        imageCount: N,
+        imageCount: outputN,
       });
     }
     
     console.log(`[CREATE_MEMORY] OUTPUT_VALIDATION_PASSED: duration=${videoDuration.toFixed(2)}s >= expectedMin=${expectedMinDuration.toFixed(2)}s`);
     console.log(`[CREATE_MEMORY] RENDER_COMPLETE`);
-    console.log(`[CREATE_MEMORY] plan: imageCountUsed=${N} targetDurationSec=${targetDuration.toFixed(2)} holdSec=${((targetDuration - (N - 1) * xfade) / N).toFixed(2)} xfadeSec=${xfade}`);
+    const outputHold = Math.max(0.9, (outputTargetDuration - (outputN - 1) * outputXfade) / outputN);
+    console.log(`[CREATE_MEMORY] plan: imageCountUsed=${outputN} targetDurationSec=${outputTargetDuration.toFixed(2)} holdSec=${outputHold.toFixed(2)} xfadeSec=${outputXfade}`);
 
     // Apply video fades to silent video first
     const videoWithFades = path.join(outDir, 'video_with_fades.mp4');
