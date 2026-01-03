@@ -680,6 +680,17 @@ async function createMemoryRenderOnly(req, res) {
 
     console.log(`[CREATE_MEMORY] uploaded OK key=${videoKey}`);
 
+    // Enforce image count used matches usable images
+    const imageCountUsed = orderedKeys.length;
+    if (imageCountUsed !== usableImages.length) {
+      console.error(`[CREATE_MEMORY] IMAGE_COUNT_USED_MISMATCH: imageCountUsed=${imageCountUsed} usableImages=${usableImages.length}`);
+      return jsonError(res, 500, 'IMAGE_COUNT_USED_MISMATCH', `Image count mismatch: used ${imageCountUsed}, usable ${usableImages.length}`, {
+        imageCountUsed,
+        usableImageCount: usableImages.length,
+        requestedImageCount: photoKeys.length,
+      });
+    }
+
     // Cleanup best-effort
     fsp.rm(baseDir, { recursive: true, force: true }).catch(() => {});
 
@@ -688,7 +699,10 @@ async function createMemoryRenderOnly(req, res) {
       jobId,
       videoKey,
       playbackUrl,
-      imageCountUsed: orderedKeys.length,
+      requestedImageCount: photoKeys.length,
+      usableImageCount: usableImages.length,
+      imageCountUsed: imageCountUsed,
+      missingKeys: [],
       orderUsed: finalOrder,
       musicKeyUsed: musicKeyUsed,
       aspectRatioUsed: aspectRatio,
