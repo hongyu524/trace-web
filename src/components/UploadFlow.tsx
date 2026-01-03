@@ -134,20 +134,32 @@ export default function UploadFlow() {
       // Step 3: Render video via Railway /api/create-memory
       setProgress({ percent: 50, step: "rendering", detail: "Creating your memory video..." });
       
+      // Comprehensive logging before render request
+      console.log('[CREATE_MEMORY] ========================================');
+      console.log('[CREATE_MEMORY] FRONTEND_REQUEST_START');
       console.log('[CREATE_MEMORY] photoKeys.length =', photoKeys.length);
-      console.log('[CREATE_MEMORY] first3 =', photoKeys.slice(0, 3));
-      console.log('[CREATE_MEMORY] last3 =', photoKeys.slice(-3));
+      console.log('[CREATE_MEMORY] photoKeys.first3 =', photoKeys.slice(0, 3));
+      console.log('[CREATE_MEMORY] photoKeys.last3 =', photoKeys.slice(-3));
       console.log('[CREATE_MEMORY] aspectRatio =', outputRatio);
       console.log('[CREATE_MEMORY] fps =', fps);
+      console.log('[CREATE_MEMORY] order.length =', optimalOrder.length);
+      console.log('[CREATE_MEMORY] order.first5 =', optimalOrder.slice(0, 5));
+      console.log('[CREATE_MEMORY] order.last5 =', optimalOrder.slice(-5));
+      console.log('[CREATE_MEMORY] context.length =', (promptText.trim() || '').length);
+      
+      const requestBody = {
+        photoKeys,
+        order: optimalOrder,
+        aspectRatio: outputRatio,
+        fps,
+        context: promptText.trim() || undefined,
+      };
+      console.log('[CREATE_MEMORY] requestBody.photoKeys.length =', requestBody.photoKeys.length);
+      console.log('[CREATE_MEMORY] requestBody.order.length =', requestBody.order.length);
+      console.log('[CREATE_MEMORY] ========================================');
       console.log(`[UploadFlow] Calling Railway: ${API_BASE}/api/create-memory`);
       try {
-        const result = await createMemoryRender({
-          photoKeys,
-          order: optimalOrder,
-          aspectRatio: outputRatio,
-          fps,
-          context: promptText.trim() || undefined,
-        });
+        const result = await createMemoryRender(requestBody);
 
         if (!result.ok || !result.playbackUrl) {
           throw new Error(result.detail || result.error || "Render failed.");

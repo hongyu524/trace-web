@@ -59,7 +59,13 @@ export type CreateMemoryResponse = {
   requestedImageCount?: number;
   usableImageCount?: number;
   imageCountUsed?: number;
+  targetDurationSec?: number;
+  holdSec?: number;
+  xfadeSec?: number;
+  actualDurationSec?: number | null;
   missingKeys?: string[];
+  orderUsed?: number[];
+  musicKeyUsed?: string;
 };
 
 export type SequenceImage = {

@@ -512,13 +512,19 @@ async function createMemoryRenderOnly(req, res) {
       }
     }
 
-    console.log(`[IMAGES] usableImages=${usableImages.length}`);
+    console.log(`[IMAGES] ========================================`);
+    console.log(`[IMAGES] VALIDATION_COMPLETE`);
+    console.log(`[IMAGES] usableImages.length = ${usableImages.length}`);
+    console.log(`[IMAGES] photoKeys.length = ${photoKeys.length}`);
     
-    // Enforce all images must be used
+    // Enforce all images must be used - use Set for accurate comparison
     if (usableImages.length !== photoKeys.length) {
-      const missing = photoKeys.filter(k => !usableImages.includes(k));
-      console.error(`[IMAGES] IMAGE_MISMATCH: requested=${photoKeys.length} usable=${usableImages.length} missing=${missing.slice(0, 5).join(', ')}`);
-      return jsonError(res, 400, 'IMAGE_MISMATCH', `Not all images could be processed: requested ${photoKeys.length}, usable ${usableImages.length}`, {
+      const usableSet = new Set(usableImages);
+      const missing = photoKeys.filter(k => !usableSet.has(k));
+      console.error(`[IMAGES] IMAGE_VALIDATION_FAILED: requested=${photoKeys.length} usable=${usableImages.length} missing=${missing.slice(0, 5).join(', ')}`);
+      return jsonError(res, 400, 'IMAGE_VALIDATION_FAILED', `Not all images could be processed: requested ${photoKeys.length}, usable ${usableImages.length}`, {
+        ok: false,
+        error: 'IMAGE_VALIDATION_FAILED',
         requestedImageCount: photoKeys.length,
         usableImageCount: usableImages.length,
         missingKeys: missing,
@@ -527,6 +533,15 @@ async function createMemoryRenderOnly(req, res) {
     
     if (missingKeys.length > 0) {
       console.log(`[IMAGES] missingKeys=${missingKeys.join(',')}`);
+    }
+    
+    // Validate minimum image count
+    if (!Array.isArray(photoKeys) || photoKeys.length < 2) {
+      return jsonError(res, 400, 'NOT_ENOUGH_IMAGES', 'photoKeys must be an array with at least 2 items', {
+        ok: false,
+        error: 'NOT_ENOUGH_IMAGES',
+        requestedImageCount: Array.isArray(photoKeys) ? photoKeys.length : 0,
+      });
     }
 
     // Determine order
