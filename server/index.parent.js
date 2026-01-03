@@ -244,6 +244,8 @@ app.use(cors({
       callback(new Error('Not allowed by CORS'));
     }
   },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
 app.use(express.json({ limit: '300mb' }));
@@ -3462,19 +3464,7 @@ app.get('/api/media/signed-url', async (req, res) => {
 console.log('Registered: GET /api/media/signed-url');
 
 // Presigned PUT URL for photo uploads (client -> S3 direct upload)
-app.options('/api/media/presign-upload', (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', 'https://tracememory.store');
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
-  res.status(204).end();
-});
-
 app.post('/api/media/presign-upload', async (req, res) => {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', 'https://tracememory.store');
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
-
   try {
     const { fileName, contentType } = req.body;
 
