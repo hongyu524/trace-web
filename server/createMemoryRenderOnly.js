@@ -374,13 +374,9 @@ async function renderSlideshow({
   ].join(',');
 
   // For image2 demuxer: -framerate controls input rate (images per second)
-  // To show each image for 'hold' seconds at output fps, we need:
-  // input_framerate = output_fps / (hold * output_fps) = 1/hold
-  // But actually, simpler: if we want each image for 'hold' seconds,
-  // and we have N images, the input rate should be N/totalSeconds
-  // However, image2 works better with framerate that matches desired per-image duration
-  // So: input_framerate = 1/hold (1 image every 'hold' seconds)
-  const inputFramerate = 1 / hold;
+  // To display N images over totalSeconds duration, input framerate should be N/totalSeconds
+  // This ensures all N images are read and displayed over the desired duration
+  const inputFramerate = N / totalSeconds;
   
   const args = [
     '-y',
