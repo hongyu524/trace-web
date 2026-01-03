@@ -1,6 +1,6 @@
 ﻿import { useState } from "react";
 import VideoPreview from "./VideoPreview";
-import { getImageSequence, type SequenceImage } from "../utils/api";
+import { getImageSequenceFromKeys, getPresignedUploadUrl, uploadFileToS3 } from "../utils/api";
 
 export default function UploadFlow() {
   const [files, setFiles] = useState<File[]>([]);
@@ -57,43 +57,59 @@ export default function UploadFlow() {
     setProgress(null); // Reset progress on new submission
 
     try {
-      // Convert files to base64 for sequence analysis
-      const imageData = await Promise.all(
-        files.map(async (file, index) => {
-          return new Promise<{ data: string; filename: string; mimeType: string; id: string }>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-              const base64 = reader.result as string;
-              const base64Data = base64.split(",")[1];
-              resolve({
-                data: base64Data,
-                filename: file.name,
-                mimeType: file.type,
-                id: String(index),
-              });
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-          });
-        })
-      );
-
-      // Step 1: Get optimal image ordering from OpenAI via Vercel /api/sequence
-      setProgress({ percent: 10, step: "analyzing", detail: "Determining optimal image sequence..." });
+      // Step 1: Upload photos to S3 first
+      setProgress({ percent: 5, step: "uploading", detail: "Uploading photos to storage..." });
       
-      const sequenceImages: SequenceImage[] = imageData.map(img => ({
-        id: img.id,
-        base64: img.data,
-        mimeType: img.mimeType,
-      }));
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "http://localhost:8080" : "");
+      if (!API_BASE) {
+        throw new Error("VITE_API_BASE_URL is not set. Cannot upload photos.");
+      }
 
-      console.log('[UploadFlow] Calling Vercel: /api/sequence');
-      console.log('[UploadFlow] Images to send:', sequenceImages.length);
-      console.log('[UploadFlow] Image format:', sequenceImages[0]?.base64 ? 'base64' : sequenceImages[0]?.url ? 'url' : 'unknown');
+      const photoKeys: string[] = [];
+      const totalFiles = files.length;
+
+      // Upload each file to S3
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const uploadProgress = Math.floor((i / totalFiles) * 20) + 5; // 5-25%
+        setProgress({
+          percent: uploadProgress,
+          step: "uploading",
+          detail: `Uploading photo ${i + 1} of ${totalFiles}...`,
+        });
+
+        try {
+          // Validate file size (max 12MB per file)
+          const maxSize = 12 * 1024 * 1024; // 12MB
+          if (file.size > maxSize) {
+            throw new Error(`File "${file.name}" is too large (${(file.size / 1024 / 1024).toFixed(2)}MB). Maximum size is 12MB.`);
+          }
+
+          // Get presigned PUT URL from Railway
+          const presignResponse = await getPresignedUploadUrl(file.name, file.type);
+          
+          // Upload file directly to S3
+          await uploadFileToS3(file, presignResponse.putUrl);
+          
+          photoKeys.push(presignResponse.key);
+          console.log(`[UploadFlow] Uploaded ${i + 1}/${totalFiles}: ${presignResponse.key}`);
+        } catch (uploadError: any) {
+          console.error(`[UploadFlow] Upload failed for file ${i + 1}:`, uploadError.message);
+          setError(`Failed to upload photo "${file.name}": ${uploadError.message}`);
+          setLoading(false);
+          setProgress(null);
+          return; // Fail fast on upload error
+        }
+      }
+
+      // Step 2: Get optimal image ordering from OpenAI via Vercel /api/sequence
+      setProgress({ percent: 30, step: "analyzing", detail: "Determining optimal image sequence..." });
+      
+      console.log('[UploadFlow] Calling Vercel: /api/sequence with', photoKeys.length, 'photo keys');
       let optimalOrder: number[];
       try {
-        const sequenceResponse = await getImageSequence(
-          sequenceImages,
+        const sequenceResponse = await getImageSequenceFromKeys(
+          photoKeys,
           promptText.trim() || undefined,
           outputRatio,
           fps
@@ -111,15 +127,20 @@ export default function UploadFlow() {
         return; // Stop execution on sequence API failure
       }
 
-      // Step 2: Reorder images based on optimal sequence
-      const reorderedData = optimalOrder.map(index => imageData[index]);
+      // Step 3: Reorder photo keys based on optimal sequence
+      const reorderedKeys = optimalOrder.map(index => photoKeys[index]);
       
-      // Convert to format expected by Railway backend
-      const photos = reorderedData.map(img => ({
-        data: img.data,
-        filename: img.filename,
-        mimeType: img.mimeType,
-      }));
+      // Convert to format expected by Railway backend (for video rendering)
+      // Railway expects base64 data, so we need to fetch from S3 or pass keys
+      // For now, we'll pass the keys and let Railway fetch them
+      const photos = reorderedKeys.map((key, index) => {
+        const originalFile = files[optimalOrder[index]];
+        return {
+          s3Key: key, // Pass S3 key instead of base64
+          filename: originalFile.name,
+          mimeType: originalFile.type,
+        };
+      });
 
       // Step 3: Send ordered photos to Railway backend for video rendering
       setProgress({ percent: 30, step: "rendering", detail: "Creating your memory video..." });

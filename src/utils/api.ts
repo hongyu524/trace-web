@@ -52,6 +52,106 @@ export type SequenceImage = {
   mimeType?: string;
 };
 
+export type PresignedUploadResponse = {
+  key: string;
+  putUrl: string;
+};
+
+/**
+ * Get presigned PUT URL for uploading a photo to S3
+ * Calls Railway backend /api/media/presign-upload
+ */
+export async function getPresignedUploadUrl(
+  fileName: string,
+  contentType: string
+): Promise<PresignedUploadResponse> {
+  console.log('[API] Requesting presigned upload URL from Railway:', `${API_BASE}/api/media/presign-upload`);
+  const response = await fetch(`${API_BASE}/api/media/presign-upload`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      fileName,
+      contentType,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Failed to get presigned upload URL' }));
+    throw new Error(errorData.error || `Presigned upload API error (${response.status})`);
+  }
+
+  const data = await response.json();
+  return data;
+}
+
+/**
+ * Upload file directly to S3 using presigned PUT URL
+ */
+export async function uploadFileToS3(
+  file: File,
+  putUrl: string
+): Promise<void> {
+  console.log('[API] Uploading file to S3:', file.name, 'size:', file.size, 'bytes');
+  const response = await fetch(putUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': file.type,
+    },
+    body: file,
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => 'Unknown error');
+    throw new Error(`S3 upload failed (${response.status}): ${text}`);
+  }
+
+  console.log('[API] File uploaded successfully to S3');
+}
+
+/**
+ * Get optimal image ordering from OpenAI
+ * Calls Vercel serverless function /api/sequence (same-origin)
+ * Now accepts S3 photo keys instead of base64 images
+ */
+export async function getImageSequenceFromKeys(
+  photoKeys: string[],
+  context?: string,
+  aspectRatio?: string,
+  frameRate?: number
+): Promise<SequenceResponse> {
+  const payload = {
+    photoKeys,
+    context,
+    aspectRatio,
+    frameRate,
+  };
+  const payloadJson = JSON.stringify(payload);
+  const payloadSize = new Blob([payloadJson]).size;
+  
+  console.log('[API] Calling Vercel /api/sequence (same-origin)');
+  console.log('[API] Sequence payload keys:', Object.keys(payload));
+  console.log('[API] Sequence payload size:', payloadSize, 'bytes (', (payloadSize / 1024 / 1024).toFixed(2), 'MB)');
+  console.log('[API] Number of photo keys:', photoKeys.length);
+  
+  const response = await fetch('/api/sequence', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: payloadJson,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Failed to get sequence' }));
+    throw new Error(errorData.error || `Sequence API error (${response.status})`);
+  }
+
+  const data = await response.json();
+  return data;
+}
+
 /**
  * Analyze images using OpenAI Vision API
  * Calls Vercel serverless function /api/vision (same-origin)
@@ -80,8 +180,8 @@ export async function analyzeImages(
 }
 
 /**
- * Get optimal image ordering from OpenAI
- * Calls Vercel serverless function /api/sequence (same-origin)
+ * Get optimal image ordering from OpenAI (LEGACY - uses base64)
+ * @deprecated Use getImageSequenceFromKeys instead to avoid 413 errors
  */
 export async function getImageSequence(
   images: SequenceImage[],
@@ -98,7 +198,7 @@ export async function getImageSequence(
   const payloadJson = JSON.stringify(payload);
   const payloadSize = new Blob([payloadJson]).size;
   
-  console.log('[API] Calling Vercel /api/sequence (same-origin)');
+  console.log('[API] Calling Vercel /api/sequence (same-origin) - LEGACY base64 mode');
   console.log('[API] Sequence payload keys:', Object.keys(payload));
   console.log('[API] Sequence payload size:', payloadSize, 'bytes (', (payloadSize / 1024 / 1024).toFixed(2), 'MB)');
   console.log('[API] Number of images:', images.length);
