@@ -41,6 +41,8 @@ export type SignedUrlPayload = {
 
 export type SequenceResponse = {
   order: number[];
+  sequence?: Array<{ key: string; order: number }>;
+  photoKeys?: string[];
   beats?: string[];
   rationale?: string;
 };
@@ -149,7 +151,23 @@ export async function getImageSequenceFromKeys(
   }
 
   const data = await response.json();
-  return data;
+  console.log("[Sequence API response]", data);
+  
+  // Guard against undefined/missing fields
+  const responseSequence = Array.isArray(data?.sequence) ? data.sequence : [];
+  const responsePhotoKeys = Array.isArray(data?.photoKeys) ? data.photoKeys : [];
+  const order = Array.isArray(data?.order) ? data.order : [];
+  
+  // If order is empty but we have responsePhotoKeys, generate default order
+  const finalOrder = order.length > 0 ? order : responsePhotoKeys.map((_: string, i: number) => i);
+  
+  return {
+    order: finalOrder,
+    sequence: responseSequence,
+    photoKeys: responsePhotoKeys,
+    beats: Array.isArray(data?.beats) ? data.beats : undefined,
+    rationale: typeof data?.rationale === 'string' ? data.rationale : undefined,
+  };
 }
 
 /**

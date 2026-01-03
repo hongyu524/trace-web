@@ -108,7 +108,8 @@ export default async function handler(req: any, res: any) {
     const body = req.body || (typeof req.json === 'function' ? await req.json() : {});
     
     // Support both new format (photoKeys) and legacy format (images with base64/url)
-    const photoKeys = body.photoKeys;
+    const inputPhotoKeys = body.photoKeys;
+    const photoKeys = Array.isArray(inputPhotoKeys) ? inputPhotoKeys : [];
     const legacyImages = body.images;
     
     if (!photoKeys && !legacyImages) {
@@ -302,12 +303,24 @@ Return ONLY valid JSON with keys: order (array of indices), beats (optional arra
       
       console.log("[SEQUENCE] text type:", typeof rawText);
 
+      // Ensure sequence array is always present for backward compatibility
+      const sequence = Array.isArray(photoKeys)
+        ? photoKeys.map((key, i) => ({ key, order: i + 1 }))
+        : [];
+
+      // Extract order as number array for backward compatibility (frontend expects order: number[])
+      const order = Array.isArray(photoKeys)
+        ? photoKeys.map((_, i) => i)
+        : [];
+
       // Return response with narrative text
       res.setHeader('X-RateLimit-Remaining', rateLimit.remaining.toString());
       return res.status(200).json({
         ok: true,
-        narrative: rawText,
-        photoKeys: photoKeys || [],
+        sequence,        // ALWAYS present, ALWAYS array
+        order,           // ALWAYS present, ALWAYS array (for backward compatibility)
+        photoKeys,       // keep
+        narrative: rawText || "",
       });
 
     } catch (error: any) {
