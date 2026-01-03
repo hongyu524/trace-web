@@ -1,6 +1,6 @@
 ﻿import { useState } from "react";
 import VideoPreview from "./VideoPreview";
-import { getImageSequenceFromKeys, getPresignedUploadUrl, uploadFileToS3 } from "../utils/api";
+import { getSequenceOrder, createMemoryRender, getPresignedUploadUrl, uploadFileToS3 } from "../utils/api";
 
 export default function UploadFlow() {
   const [files, setFiles] = useState<File[]>([]);
@@ -107,33 +107,21 @@ export default function UploadFlow() {
       // Step 2: Get optimal image ordering from OpenAI via Vercel /api/sequence
       setProgress({ percent: 30, step: "analyzing", detail: "Determining optimal image sequence..." });
       
-      console.log('[UploadFlow] Calling Vercel: /api/sequence with', photoKeys.length, 'photo keys');
+      console.log('[UploadFlow] Calling Vercel: /api/sequence');
       let optimalOrder: number[];
       try {
-        const sequenceResponse = await getImageSequenceFromKeys(
+        const seq = await getSequenceOrder({
           photoKeys,
-          promptText.trim() || undefined,
-          outputRatio,
-          fps
-        );
-        
-        // Guard against undefined/missing sequence
-        const sequence = Array.isArray(sequenceResponse?.sequence) ? sequenceResponse.sequence : [];
-        optimalOrder = Array.isArray(sequenceResponse?.order) ? sequenceResponse.order : [];
-        const responsePhotoKeys = Array.isArray(sequenceResponse?.photoKeys) ? sequenceResponse.photoKeys : [];
+          context: promptText.trim() || undefined,
+        });
+        optimalOrder = seq.order;
         
         console.log('[UploadFlow] Sequence ordering received:', optimalOrder);
         
-        // If order is empty, show user-friendly error instead of crashing
-        if (optimalOrder.length === 0) {
-          setError("Failed to determine image sequence. Please try again with different photos.");
-          setLoading(false);
-          setProgress(null);
-          return;
-        }
-        
-        if (sequenceResponse.rationale) {
-          console.log('[UploadFlow] Sequence rationale:', sequenceResponse.rationale);
+        // Fallback safety: if order is invalid, use default order
+        if (!Array.isArray(optimalOrder) || optimalOrder.length !== photoKeys.length) {
+          console.warn('[UploadFlow] Invalid order received, using default order');
+          optimalOrder = Array.from({ length: photoKeys.length }, (_, i) => i);
         }
       } catch (seqError: any) {
         console.error('[UploadFlow] Sequence API failed:', seqError.message);
@@ -143,110 +131,37 @@ export default function UploadFlow() {
         return; // Stop execution on sequence API failure
       }
 
-      // Step 3: Reorder photo keys based on optimal sequence
-      const reorderedKeys = optimalOrder.map(index => photoKeys[index]);
+      // Step 3: Render video via Railway /api/create-memory
+      setProgress({ percent: 50, step: "rendering", detail: "Creating your memory video..." });
       
-      // Convert to format expected by Railway backend (for video rendering)
-      // Railway expects base64 data, so we need to fetch from S3 or pass keys
-      // For now, we'll pass the keys and let Railway fetch them
-      const photos = reorderedKeys.map((key, index) => {
-        const originalFile = files[optimalOrder[index]];
-        return {
-          s3Key: key, // Pass S3 key instead of base64
-          filename: originalFile.name,
-          mimeType: originalFile.type,
-        };
-      });
-
-      // Step 3: Send ordered photos to Railway backend for video rendering
-      setProgress({ percent: 30, step: "rendering", detail: "Creating your memory video..." });
-
-      // Use fetch with streaming response for SSE progress updates
-      const railwayUrl = `${API_BASE}/api/create-memory`;
-      console.log(`[UploadFlow] Calling Railway: ${railwayUrl}`);
-      const response = await fetch(`${railwayUrl}?stream=true`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "text/event-stream",
-        },
-        body: JSON.stringify({
-          photos,
-          outputRatio,
+      console.log(`[UploadFlow] Calling Railway: ${API_BASE}/api/create-memory`);
+      try {
+        const result = await createMemoryRender({
+          photoKeys,
+          order: optimalOrder,
+          aspectRatio: outputRatio,
           fps,
-          promptText: promptText.trim(),
-        }),
-      });
+          context: promptText.trim() || undefined,
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: "Failed to create memory" }));
-        throw new Error(errorData.message || "Failed to create memory");
-      }
-
-      // Read SSE stream
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      
-      if (!reader) {
-        throw new Error("Stream not available");
-      }
-
-      let buffer = "";
-      let currentEvent = "";
-      
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          
-          // Handle event type
-          if (trimmed.startsWith("event: ")) {
-            currentEvent = trimmed.slice(7).trim();
-            continue;
-          }
-          
-          // Handle data
-          if (trimmed.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(trimmed.slice(6));
-              
-              // Handle different event types
-              if (currentEvent === "complete" || data.step === "complete") {
-                setLoading(false);
-                if (data.resourcePath) {
-                  setVideoPath(data.resourcePath);
-                  // Store memoryId if available from response
-                  if (data.memoryId) {
-                    setMemoryId(data.memoryId);
-                  }
-                }
-                setProgress(null);
-                return;
-              } else if (currentEvent === "error" || data.step === "error") {
-                setLoading(false);
-                setError(data.error || "An unknown error occurred during video creation.");
-                setProgress(null);
-                return;
-              } else {
-                // Progress update (progress event or any other)
-                setProgress({
-                  percent: data.percent || 0,
-                  step: data.step || "processing",
-                  detail: data.detail || "",
-                });
-              }
-            } catch (e) {
-              console.error("Failed to parse SSE data:", e, line);
-            }
-            currentEvent = ""; // Reset after processing
-          }
+        if (!result.ok || !result.playbackUrl) {
+          throw new Error(result.detail || result.error || "Render failed.");
         }
+
+        // Step 4: Show video
+        setProgress({ percent: 100, step: "complete", detail: "Memory created successfully!" });
+        setVideoPath(result.playbackUrl);
+        if (result.jobId) {
+          setMemoryId(result.jobId);
+        }
+        console.log('[UploadFlow] Memory created successfully:', result.videoKey);
+        
+      } catch (renderError: any) {
+        console.error('[UploadFlow] Render failed:', renderError.message);
+        setError(renderError.message || "Failed to create memory video. Please try again.");
+        setLoading(false);
+        setProgress(null);
+        return;
       }
     } catch (err: any) {
       setError(err.message || "Failed to create video");
