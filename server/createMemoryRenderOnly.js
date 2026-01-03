@@ -536,10 +536,7 @@ async function createMemoryRenderOnly(req, res) {
 
     console.log(`[IMAGES] finalOrder=[${finalOrder.join(',')}]`);
 
-    const fps = Number(frameRate);
-    if (!Number.isFinite(fps) || fps < 1 || fps > 60) {
-      return jsonError(res, 400, 'invalid_request', 'frameRate must be a number between 1 and 60');
-    }
+    // fps is already normalized above, no need to validate again
 
     const jobId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 
@@ -668,6 +665,8 @@ async function createMemoryRenderOnly(req, res) {
       imageCountUsed: orderedKeys.length,
       orderUsed: finalOrder,
       musicKeyUsed: musicKeyUsed,
+      aspectRatioUsed: aspectRatio,
+      fpsUsed: fps,
     });
   } catch (err) {
     console.error('[CREATE_MEMORY] ERROR', err?.message || err, err?.stderr || '');
