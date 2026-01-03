@@ -44,6 +44,16 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
+// CRITICAL: Lightweight OPTIONS handler MUST be at the top, before any heavy imports
+// This handles CORS preflight requests instantly without loading FFmpeg, Sharp, etc.
+app.options('*', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  return res.status(204).end();
+});
+
 export { app }; // Export app so index.js can register routes
 const PORT = process.env.PORT || 8080;
 const HOST = "0.0.0.0";
