@@ -180,6 +180,78 @@ export async function getImageSequenceFromKeys(
 }
 
 /**
+ * Get sequence order from Vercel /api/sequence
+ * Calls same-origin Vercel serverless function
+ */
+export async function getSequenceOrder(params: {
+  photoKeys: string[];
+  context?: string;
+}): Promise<SequenceResponse> {
+  const res = await fetch(`/api/sequence`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+
+  const text = await res.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`Sequence API returned non-JSON: ${text.slice(0, 200)}`);
+  }
+
+  if (!res.ok) {
+    throw new Error(data?.error || `Sequence API failed (${res.status})`);
+  }
+
+  if (!Array.isArray(data?.order)) {
+    throw new Error(`Sequence API missing 'order'. Got: ${text.slice(0, 200)}`);
+  }
+
+  return { order: data.order };
+}
+
+/**
+ * Create memory video via Railway /api/create-memory
+ * Calls Railway backend for render-only video creation
+ */
+export async function createMemoryRender(params: {
+  photoKeys: string[];
+  order: number[];
+  aspectRatio: string;
+  fps: number;
+  context?: string;
+}): Promise<CreateMemoryResponse> {
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "http://localhost:8080" : "");
+  
+  if (!API_BASE) {
+    throw new Error("VITE_API_BASE_URL is not set. Cannot create memory.");
+  }
+
+  console.log(`[API] Calling Railway: ${API_BASE}/api/create-memory`);
+  const res = await fetch(`${API_BASE}/api/create-memory`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+
+  const text = await res.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`Create-memory returned non-JSON: ${text.slice(0, 200)}`);
+  }
+
+  if (!res.ok) {
+    return { ok: false, error: data?.error || "create_memory_failed", detail: data?.detail || text };
+  }
+
+  return data as CreateMemoryResponse;
+}
+
+/**
  * Analyze images using OpenAI Vision API
  * Calls Vercel serverless function /api/vision (same-origin)
  */
