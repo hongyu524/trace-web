@@ -2118,9 +2118,18 @@ app.post('/api/upload-photos', upload.array('photos', MAX_PHOTOS), async (req, r
  * Replaces the old OpenAI-based endpoint
  * Lazy-load createMemoryRenderOnly to avoid loading heavy modules (sharp, ffmpeg) at startup
  */
-app.options('/api/create-memory', async (req, res) => {
-  const { createMemoryRenderOnly } = await import('./createMemoryRenderOnly.js');
-  return createMemoryRenderOnly(req, res);
+app.options('/api/create-memory', (req, res) => {
+  // OPTIONS handled by lightweight handler at top, but ensure CORS headers are set
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Vary', 'Origin');
+  res.status(204).end();
 });
 
 app.post('/api/create-memory', async (req, res) => {
