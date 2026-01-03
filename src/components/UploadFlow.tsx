@@ -116,8 +116,22 @@ export default function UploadFlow() {
           outputRatio,
           fps
         );
-        optimalOrder = sequenceResponse.order;
+        
+        // Guard against undefined/missing sequence
+        const sequence = Array.isArray(sequenceResponse?.sequence) ? sequenceResponse.sequence : [];
+        optimalOrder = Array.isArray(sequenceResponse?.order) ? sequenceResponse.order : [];
+        const responsePhotoKeys = Array.isArray(sequenceResponse?.photoKeys) ? sequenceResponse.photoKeys : [];
+        
         console.log('[UploadFlow] Sequence ordering received:', optimalOrder);
+        
+        // If order is empty, show user-friendly error instead of crashing
+        if (optimalOrder.length === 0) {
+          setError("Failed to determine image sequence. Please try again with different photos.");
+          setLoading(false);
+          setProgress(null);
+          return;
+        }
+        
         if (sequenceResponse.rationale) {
           console.log('[UploadFlow] Sequence rationale:', sequenceResponse.rationale);
         }
