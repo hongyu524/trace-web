@@ -337,9 +337,23 @@ async function renderSlideshow({
   
   console.log(`[RENDER] aspectRatio=${aspectRatio} dimensions=${width}x${height} fps=${fps}`);
 
-  // Make each image last ~2.5s; you can tune this
-  const secondsPerImage = 2.5;
-  const totalSeconds = Math.max(3, Math.round(frameCount * secondsPerImage));
+  // Timing calculation: ensure balanced per-image durations
+  // T = target film duration, N = number of images, X = crossfade duration
+  const crossfade = 0.35; // Crossfade duration in seconds
+  const targetDuration = Math.max(12, Math.min(18, frameCount * 1.7)); // Target 12-18s for reasonable clip counts
+  const hold = Math.max(0.9, Math.min(2.2, (targetDuration / frameCount) - crossfade));
+  const totalSeconds = Math.round(frameCount * hold + (frameCount - 1) * crossfade);
+  
+  // Sanity checks
+  const timelineDiff = Math.abs(totalSeconds - targetDuration);
+  if (timelineDiff > 0.5) {
+    console.warn(`[PLAN] Timeline duration differs from target: totalSeconds=${totalSeconds} target=${targetDuration.toFixed(2)} diff=${timelineDiff.toFixed(2)}`);
+  }
+  if (hold > 2.5) {
+    console.warn(`[PLAN] Hold duration exceeds safe limit: hold=${hold.toFixed(2)}`);
+  }
+  
+  console.log(`[PLAN] N=${frameCount} T=${targetDuration.toFixed(2)} hold=${hold.toFixed(2)} xfade=${crossfade} totalSeconds=${totalSeconds}`);
 
   // We create an input pattern 0001.jpg, 0002.jpg...
   // Use -framerate to control image input rate; then enforce output fps
@@ -360,7 +374,7 @@ async function renderSlideshow({
     'error',
     // image2 demuxer:
     '-framerate',
-    String(1 / secondsPerImage), // how quickly images advance
+    String(1 / hold), // how quickly images advance (based on hold duration)
     '-i',
     inputPattern,
     '-t',

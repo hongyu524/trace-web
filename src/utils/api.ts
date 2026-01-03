@@ -56,6 +56,10 @@ export type CreateMemoryResponse = {
   detail?: string;
   aspectRatioUsed?: string;
   fpsUsed?: number;
+  requestedImageCount?: number;
+  usableImageCount?: number;
+  imageCountUsed?: number;
+  missingKeys?: string[];
 };
 
 export type SequenceImage = {
