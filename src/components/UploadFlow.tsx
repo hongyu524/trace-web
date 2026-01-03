@@ -90,8 +90,8 @@ export default function UploadFlow() {
           // Get presigned PUT URL from Railway
           const presignResponse = await getPresignedUploadUrl(file.name, file.type);
           
-          // Upload file directly to S3
-          await uploadFileToS3(file, presignResponse.putUrl);
+          // Upload file directly to S3 using the returned key
+          await uploadFileToS3(file, presignResponse.url);
           
           photoKeys.push(presignResponse.key);
           console.log(`[UploadFlow] Uploaded ${i + 1}/${totalFiles}: ${presignResponse.key}`);

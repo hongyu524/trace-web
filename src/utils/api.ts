@@ -53,8 +53,8 @@ export type SequenceImage = {
 };
 
 export type PresignedUploadResponse = {
+  url: string;
   key: string;
-  putUrl: string;
 };
 
 /**
@@ -91,10 +91,10 @@ export async function getPresignedUploadUrl(
  */
 export async function uploadFileToS3(
   file: File,
-  putUrl: string
+  url: string
 ): Promise<void> {
   console.log('[API] Uploading file to S3:', file.name, 'size:', file.size, 'bytes');
-  const response = await fetch(putUrl, {
+  const response = await fetch(url, {
     method: 'PUT',
     headers: {
       'Content-Type': file.type,
