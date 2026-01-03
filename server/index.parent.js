@@ -255,8 +255,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// MUST exist or preflight will 404 and the browser will block upload
-app.options('*', cors());
 app.use(express.json({ limit: '300mb' }));
 app.use(express.urlencoded({ extended: true, limit: '300mb' }));
 
