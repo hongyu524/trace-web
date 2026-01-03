@@ -168,6 +168,9 @@ async function downloadImageFromS3(s3Key, localPath) {
 
 // Upload final video to S3 and generate signed URLs
 async function uploadFinalVideoToS3(rawPath, filename, musicTrack = null) {
+  // Lazy-load heavy video processing modules
+  const { finalizeForWeb, ffprobeInfo } = await import('./utils/videoFinalize.js');
+  
   const key = `videos/published/${filename}`;
   const webPath = rawPath.replace(/\.mp4$/i, '_web.mp4');
 
