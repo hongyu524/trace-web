@@ -373,14 +373,23 @@ async function renderSlideshow({
     `format=yuv420p`,
   ].join(',');
 
+  // For image2 demuxer: -framerate controls input rate (images per second)
+  // To show each image for 'hold' seconds at output fps, we need:
+  // input_framerate = output_fps / (hold * output_fps) = 1/hold
+  // But actually, simpler: if we want each image for 'hold' seconds,
+  // and we have N images, the input rate should be N/totalSeconds
+  // However, image2 works better with framerate that matches desired per-image duration
+  // So: input_framerate = 1/hold (1 image every 'hold' seconds)
+  const inputFramerate = 1 / hold;
+  
   const args = [
     '-y',
     '-hide_banner',
     '-loglevel',
     'error',
-    // image2 demuxer:
+    // image2 demuxer: set input framerate to control image display duration
     '-framerate',
-    String(1 / hold), // how quickly images advance (based on hold duration)
+    String(inputFramerate),
     '-i',
     inputPattern,
     '-t',
@@ -393,6 +402,8 @@ async function renderSlideshow({
     'yuv420p',
     outPath,
   ];
+  
+  console.log(`[PLAN] FFmpeg args: inputFramerate=${inputFramerate.toFixed(3)} totalSeconds=${totalSeconds}`);
 
   return run(ffmpeg, args, { env: process.env });
 }
