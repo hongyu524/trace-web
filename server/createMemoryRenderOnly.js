@@ -315,10 +315,27 @@ async function renderSlideshow({
 }) {
   const ffmpeg = pickFfmpegPath();
 
-  // Determine output dimensions
-  const isPortrait = aspectRatio === '9:16' || aspectRatio === 'portrait';
-  const width = isPortrait ? 1080 : 1920;
-  const height = isPortrait ? 1920 : 1080;
+  // Determine output dimensions based on aspect ratio
+  let width, height;
+  if (aspectRatio === '1:1') {
+    // Square
+    width = 1080;
+    height = 1080;
+  } else if (aspectRatio === '9:16' || aspectRatio === 'portrait') {
+    // Portrait
+    width = 1080;
+    height = 1920;
+  } else if (aspectRatio === '2.39:1' || aspectRatio === '239:100') {
+    // Ultrawide (CinemaScope)
+    width = 1920;
+    height = 803; // 1920 / 2.39 ≈ 803
+  } else {
+    // Default: 16:9 landscape
+    width = 1920;
+    height = 1080;
+  }
+  
+  console.log(`[RENDER] aspectRatio=${aspectRatio} dimensions=${width}x${height} fps=${fps}`);
 
   // Make each image last ~2.5s; you can tune this
   const secondsPerImage = 2.5;
@@ -358,6 +375,39 @@ async function renderSlideshow({
   ];
 
   return run(ffmpeg, args, { env: process.env });
+}
+
+function normalizeAspectRatio(input) {
+  if (!input || typeof input !== 'string') return '16:9';
+  
+  const normalized = input.trim().toLowerCase();
+  
+  // Handle common label strings
+  if (normalized.includes('square') || normalized === '1:1') return '1:1';
+  if (normalized.includes('portrait') || normalized === '9:16') return '9:16';
+  if (normalized.includes('wide') || normalized.includes('film') || normalized === '2.39:1' || normalized === '239:100') return '2.39:1';
+  if (normalized.includes('hd') || normalized === '16:9') return '16:9';
+  
+  // Try to parse as ratio (e.g., "16:9", "1:1", "2.39:1")
+  if (/^\d+(\.\d+)?:\d+(\.\d+)?$/.test(normalized)) {
+    return input.trim(); // Return original to preserve exact format
+  }
+  
+  // Default fallback
+  return '16:9';
+}
+
+function normalizeFps(input) {
+  if (typeof input === 'number' && Number.isFinite(input)) {
+    return Math.max(1, Math.min(60, Math.round(input)));
+  }
+  if (typeof input === 'string') {
+    const parsed = parseFloat(input);
+    if (Number.isFinite(parsed)) {
+      return Math.max(1, Math.min(60, Math.round(parsed)));
+    }
+  }
+  return 24; // Default
 }
 
 function jsonError(res, status, error, detail, extra = {}) {
