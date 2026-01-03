@@ -134,6 +134,9 @@ export default function UploadFlow() {
       // Step 3: Render video via Railway /api/create-memory
       setProgress({ percent: 50, step: "rendering", detail: "Creating your memory video..." });
       
+      console.log('[CREATE_MEMORY] photoKeys.length =', photoKeys.length);
+      console.log('[CREATE_MEMORY] first3 =', photoKeys.slice(0, 3));
+      console.log('[CREATE_MEMORY] last3 =', photoKeys.slice(-3));
       console.log(`[UploadFlow] Calling Railway: ${API_BASE}/api/create-memory`);
       try {
         const result = await createMemoryRender({
