@@ -291,21 +291,29 @@ Return ONLY valid JSON with keys: order (array of indices), beats (optional arra
         });
       }
 
-      const text = json.output_text || json.output || '';
-      console.log('[SEQUENCE] OpenAI response text length:', text.length);
+      // Ensure text is a string
+      const text = typeof json.output_text === 'string' 
+        ? json.output_text 
+        : (typeof json.output === 'string' ? json.output : String(json.output_text || json.output || ''));
+      
+      console.log('[SEQUENCE] OpenAI response text type:', typeof text, 'length:', typeof text === 'string' ? text.length : 'N/A');
 
       // Parse JSON response
       let parsed: any;
       try {
+        // Ensure text is a string before processing
+        const textStr = String(text);
         // Remove markdown code blocks if present
-        const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const cleaned = textStr.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
         parsed = JSON.parse(cleaned);
       } catch (parseError) {
         console.error('[SEQUENCE] JSON parse error:', parseError);
-        console.error('[SEQUENCE] Response text snippet:', text.substring(0, 500));
+        const textStr = String(text);
+        const snippet = textStr.length > 500 ? textStr.substring(0, 500) : textStr;
+        console.error('[SEQUENCE] Response text snippet:', snippet);
         return res.status(500).json({ 
           error: 'Failed to parse OpenAI response as JSON',
-          responseSnippet: text.substring(0, 500)
+          responseSnippet: snippet
         });
       }
 
