@@ -339,10 +339,12 @@ async function renderSlideshow({
 
   // Timing calculation with deterministic filtergraph
   // N = number of images, xf = crossfade duration
+  // xfade overlap model: totalDuration = N * hold + xf
   const N = frameCount;
   const xf = 0.35; // Crossfade duration in seconds
   const targetDuration = Math.max(12, Math.min(30, N * 1.7)); // 9 images -> 15.3s
-  const hold = Math.max(0.9, (targetDuration - (N - 1) * xf) / N);
+  // Correct formula: hold = (targetDuration - xf) / N
+  const hold = Math.max(0.9, (targetDuration - xf) / N);
   const clipDur = hold + xf; // Each clip includes overlap room for xfade
   
   // Calculate cumulative offsets for xfade transitions
@@ -353,8 +355,8 @@ async function renderSlideshow({
     offsets.push(offset);
   }
   
-  // Expected total duration (for validation)
-  const expectedTotalSeconds = N * hold + (N - 1) * xf;
+  // Expected total duration (xfade overlap model: N * hold + xf)
+  const expectedTotalSeconds = N * hold + xf;
   
   // Fail-loud check: prevent hold from being too long
   if (hold > 3.0) {
@@ -368,6 +370,7 @@ async function renderSlideshow({
   console.log(`[PLAN] expectedTotalSeconds=${expectedTotalSeconds.toFixed(2)}`);
   console.log(`[PLAN] inputCount=${N}`);
   console.log(`[PLAN] offsets=[${offsets.map(o => o.toFixed(2)).join(', ')}]`);
+  console.log(`[PLAN] lastOffset=${offsets.length > 0 ? offsets[offsets.length - 1].toFixed(2) : 'N/A'}`);
   console.log(`[PLAN] ========================================`);
 
   // Build FFmpeg inputs (one per image)
@@ -704,8 +707,10 @@ async function createMemoryRenderOnly(req, res) {
     const outputN = orderedKeys.length;
     const outputXfade = 0.35;
     const outputTargetDuration = Math.max(12, Math.min(30, outputN * 1.7));
-    const outputHold = Math.max(0.9, (outputTargetDuration - (outputN - 1) * outputXfade) / outputN);
-    const expectedTotalSeconds = outputN * outputHold + (outputN - 1) * outputXfade;
+    // Correct xfade overlap formula: hold = (targetDuration - xf) / N
+    const outputHold = Math.max(0.9, (outputTargetDuration - outputXfade) / outputN);
+    // Correct xfade overlap formula: expectedTotalSeconds = N * hold + xf
+    const expectedTotalSeconds = outputN * outputHold + outputXfade;
     const expectedMinDuration = expectedTotalSeconds - 0.5;
     
     // Calculate offsets for error reporting
@@ -830,7 +835,8 @@ async function createMemoryRenderOnly(req, res) {
     const N = imageCountUsed;
     const xfade = 0.35;
     const targetDuration = Math.max(12, Math.min(30, N * 1.7));
-    const hold = Math.max(0.9, (targetDuration - (N - 1) * xfade) / N);
+    // Correct xfade overlap formula: hold = (targetDuration - xf) / N
+    const hold = Math.max(0.9, (targetDuration - xfade) / N);
     
     // Get actual video duration if available (from final output)
     let actualDuration = null;
