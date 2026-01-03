@@ -185,13 +185,11 @@ async function createMemoryRenderOnly(req, res) {
       return jsonError(res, 400, 'invalid_request', 'photoKeys must be an array of strings');
     }
 
-    if (!isValidPermutation(order, photoKeys.length)) {
-      return jsonError(
-        res,
-        400,
-        'invalid_request',
-        'order must be a valid permutation array matching photoKeys length'
-      );
+    // Validate order: if missing or invalid, use default order [0, 1, 2, ..., n-1]
+    let finalOrder = order;
+    if (!Array.isArray(order) || !isValidPermutation(order, photoKeys.length)) {
+      console.log(`[CREATE_MEMORY] order missing or invalid, using default order [0..${photoKeys.length - 1}]`);
+      finalOrder = Array.from({ length: photoKeys.length }, (_, i) => i);
     }
 
     const fps = Number(frameRate);
@@ -199,8 +197,8 @@ async function createMemoryRenderOnly(req, res) {
       return jsonError(res, 400, 'invalid_request', 'frameRate must be a number between 1 and 60');
     }
 
-    // Build ordered keys
-    const orderedKeys = order.map((i) => photoKeys[i]);
+    // Build ordered keys using finalOrder (validated or default)
+    const orderedKeys = finalOrder.map((i) => photoKeys[i]);
 
     const jobId =
       Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
