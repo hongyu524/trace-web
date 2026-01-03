@@ -26,7 +26,9 @@ if (import.meta.env.PROD && !API_BASE) {
 
 // Diagnostics: log API_BASE at runtime (non-secret, for debugging)
 if (typeof window !== 'undefined') {
-  console.log('[API] Railway backend API_BASE:', API_BASE || '(not set)');
+  console.log('[API_BASE]', API_BASE || '(not set)');
+  console.log('[SEQUENCE_URL]', '/api/sequence (same-origin Vercel)');
+  console.log('[RAILWAY_URL]', API_BASE ? `${API_BASE}/api/create-memory` : '(API_BASE not set)');
 }
 
 export type SignedUrlPayload = {
@@ -87,18 +89,31 @@ export async function getImageSequence(
   aspectRatio?: string,
   frameRate?: number
 ): Promise<SequenceResponse> {
+  const payload = {
+    images,
+    context,
+    aspectRatio,
+    frameRate,
+  };
+  const payloadJson = JSON.stringify(payload);
+  const payloadSize = new Blob([payloadJson]).size;
+  
   console.log('[API] Calling Vercel /api/sequence (same-origin)');
+  console.log('[API] Sequence payload keys:', Object.keys(payload));
+  console.log('[API] Sequence payload size:', payloadSize, 'bytes (', (payloadSize / 1024 / 1024).toFixed(2), 'MB)');
+  console.log('[API] Number of images:', images.length);
+  if (images.length > 0) {
+    const firstImage = images[0];
+    const imageDataSize = firstImage.base64 ? firstImage.base64.length : (firstImage.url ? firstImage.url.length : 0);
+    console.log('[API] Sample image data size:', imageDataSize, 'bytes (first image, base64 length)');
+  }
+  
   const response = await fetch('/api/sequence', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      images,
-      context,
-      aspectRatio,
-      frameRate,
-    }),
+    body: payloadJson,
   });
 
   if (!response.ok) {
