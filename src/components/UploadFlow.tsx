@@ -56,14 +56,16 @@ export default function UploadFlow() {
     setError(null);
     setProgress(null); // Reset progress on new submission
 
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "http://localhost:8080" : "");
+    if (!API_BASE) {
+      setError("VITE_API_BASE_URL is not set. Cannot upload photos.");
+      setLoading(false);
+      return;
+    }
+
     try {
       // Step 1: Upload photos to S3 first
       setProgress({ percent: 5, step: "uploading", detail: "Uploading photos to storage..." });
-      
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "http://localhost:8080" : "");
-      if (!API_BASE) {
-        throw new Error("VITE_API_BASE_URL is not set. Cannot upload photos.");
-      }
 
       const photoKeys: string[] = [];
       const totalFiles = files.length;
@@ -146,7 +148,6 @@ export default function UploadFlow() {
       setProgress({ percent: 30, step: "rendering", detail: "Creating your memory video..." });
 
       // Use fetch with streaming response for SSE progress updates
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "http://localhost:8080" : "");
       const railwayUrl = `${API_BASE}/api/create-memory`;
       console.log(`[UploadFlow] Calling Railway: ${railwayUrl}`);
       const response = await fetch(`${railwayUrl}?stream=true`, {
