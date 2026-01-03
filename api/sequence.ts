@@ -292,52 +292,22 @@ Return ONLY valid JSON with keys: order (array of indices), beats (optional arra
       }
 
       // Ensure text is a string
-      const text = typeof json.output_text === 'string' 
-        ? json.output_text 
-        : (typeof json.output === 'string' ? json.output : String(json.output_text || json.output || ''));
+      // Extract text safely - treat OpenAI output as plain text, not JSON
+      const rawText =
+        typeof json.output_text === "string"
+          ? json.output_text
+          : Array.isArray(json.output)
+            ? json.output.map((o: any) => o?.content?.map((c: any) => c?.text).join("")).join("")
+            : String(json);
       
-      console.log('[SEQUENCE] OpenAI response text type:', typeof text, 'length:', typeof text === 'string' ? text.length : 'N/A');
+      console.log("[SEQUENCE] text type:", typeof rawText);
 
-      // Parse JSON response
-      let parsed: any;
-      try {
-        // Ensure text is a string before processing
-        const textStr = String(text);
-        // Remove markdown code blocks if present
-        const cleaned = textStr.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        parsed = JSON.parse(cleaned);
-      } catch (parseError) {
-        console.error('[SEQUENCE] JSON parse error:', parseError);
-        const textStr = String(text);
-        const snippet = textStr.length > 500 ? textStr.substring(0, 500) : textStr;
-        console.error('[SEQUENCE] Response text snippet:', snippet);
-        return res.status(500).json({ 
-          error: 'Failed to parse OpenAI response as JSON',
-          responseSnippet: snippet
-        });
-      }
-
-      // Validate order array
-      if (!Array.isArray(parsed.order)) {
-        return res.status(500).json({ error: 'Response missing valid "order" array' });
-      }
-
-      // Ensure order contains all indices exactly once
-      const expectedIndices = Array.from({ length: imageCount }, (_, i) => i);
-      const orderSet = new Set(parsed.order);
-      const hasAllIndices = expectedIndices.every(i => orderSet.has(i)) && parsed.order.length === imageCount;
-      
-      if (!hasAllIndices) {
-        console.warn('[SEQUENCE] Order validation failed, using fallback');
-        parsed.order = expectedIndices; // Fallback to original order
-      }
-
-      // Return response
+      // Return response with narrative text
       res.setHeader('X-RateLimit-Remaining', rateLimit.remaining.toString());
       return res.status(200).json({
-        order: parsed.order,
-        beats: Array.isArray(parsed.beats) ? parsed.beats : undefined,
-        rationale: typeof parsed.rationale === 'string' ? parsed.rationale : undefined
+        ok: true,
+        narrative: rawText,
+        photoKeys: photoKeys || [],
       });
 
     } catch (error: any) {
