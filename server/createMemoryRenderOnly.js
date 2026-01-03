@@ -4,7 +4,7 @@ import path from 'path';
 import os from 'os';
 import { spawn } from 'child_process';
 
-import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // -------------------- Config --------------------
@@ -38,6 +38,16 @@ function isValidPermutation(order, n) {
   return true;
 }
 
+function isImageKey(key) {
+  const ext = path.extname(key).toLowerCase();
+  return ['.jpg', '.jpeg', '.png', '.webp'].includes(ext);
+}
+
+function isAudioKey(key) {
+  const ext = path.extname(key).toLowerCase();
+  return ['.mp3', '.m4a', '.wav', '.aac', '.ogg'].includes(ext);
+}
+
 async function ensureDir(dir) {
   await fsp.mkdir(dir, { recursive: true });
 }
@@ -65,7 +75,6 @@ async function uploadFileToS3(bucket, key, filePath, contentType) {
       Key: key,
       Body: body,
       ContentType: contentType,
-      // You can add CacheControl or ACL here if you use them
     })
   );
 }
@@ -90,8 +99,145 @@ function run(cmd, args, opts = {}) {
 }
 
 function pickFfmpegPath() {
-  // Your Railway logs show: Found in PATH: /usr/bin/ffmpeg
   return process.env.FFMPEG_PATH || 'ffmpeg';
+}
+
+function pickFfprobePath() {
+  const ffmpegPath = pickFfmpegPath();
+  const ffmpegDir = path.dirname(ffmpegPath);
+  const ext = path.extname(ffmpegPath);
+  const candidate = path.join(ffmpegDir, `ffprobe${ext}`);
+  if (fs.existsSync(candidate)) return candidate;
+  return process.env.FFPROBE_PATH || 'ffprobe';
+}
+
+async function ffprobeHasAudio(filePath) {
+  const ffprobe = pickFfprobePath();
+  try {
+    const { stdout } = await run(ffprobe, [
+      '-v', 'error',
+      '-select_streams', 'a',
+      '-show_entries', 'stream=codec_type',
+      '-of', 'json',
+      filePath,
+    ]);
+    const parsed = JSON.parse(stdout);
+    const audioStreams = parsed.streams?.filter((s) => s.codec_type === 'audio') || [];
+    return audioStreams.length > 0;
+  } catch (err) {
+    console.error(`[FFPROBE] Error checking audio: ${err.message}`);
+    return false;
+  }
+}
+
+function parseManifest(manifestBuf) {
+  try {
+    const text = manifestBuf.toString('utf-8');
+    const data = JSON.parse(text);
+    return {
+      tracks: Array.isArray(data.tracks) ? data.tracks : [],
+    };
+  } catch (err) {
+    console.warn('[MUSIC] Failed to parse manifest:', err.message);
+    return { tracks: [] };
+  }
+}
+
+async function selectMusicTrack(bucket, musicPrefix = 'music/') {
+  console.log('[MUSIC] enabled=true');
+  
+  // Try manifest first
+  const manifestKey = `${musicPrefix}manifest.json`;
+  let manifestFound = false;
+  let tracks = [];
+  
+  try {
+    const resp = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: manifestKey }));
+    if (resp && resp.Body) {
+      const chunks = [];
+      for await (const chunk of resp.Body) {
+        chunks.push(chunk);
+      }
+      const manifestBuf = Buffer.concat(chunks);
+      const manifest = parseManifest(manifestBuf);
+      tracks = manifest.tracks || [];
+      manifestFound = true;
+      console.log('[MUSIC] manifestFound=true tracks=' + tracks.length);
+    }
+  } catch (err) {
+    console.log('[MUSIC] manifestFound=false (not found or error)');
+  }
+  
+  // If no tracks from manifest, list S3 objects
+  if (tracks.length === 0) {
+    try {
+      const listResp = await s3.send(
+        new ListObjectsV2Command({
+          Bucket: bucket,
+          Prefix: musicPrefix,
+        })
+      );
+      
+      const audioKeys = (listResp.Contents || [])
+        .map((obj) => obj.Key)
+        .filter((key) => key && isAudioKey(key) && !key.endsWith('manifest.json'))
+        .sort();
+      
+      tracks = audioKeys.map((key) => ({ key }));
+      console.log('[MUSIC] Listed S3 objects, found ' + audioKeys.length + ' audio files');
+    } catch (err) {
+      console.error('[MUSIC] Failed to list S3 objects:', err.message);
+    }
+  }
+  
+  if (tracks.length === 0) {
+    throw new Error('No music tracks available in S3');
+  }
+  
+  // Select deterministically (use first track for simplicity - can be improved)
+  const selected = tracks[0];
+  const selectedKey = selected.key || selected;
+  console.log('[MUSIC] selectedKey=' + selectedKey);
+  
+  return selectedKey;
+}
+
+async function downloadMusicTrack(bucket, key, destPath) {
+  const resp = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  if (!resp || !resp.Body) throw new Error(`S3 GetObject returned empty body for key=${key}`);
+  
+  const chunks = [];
+  for await (const chunk of resp.Body) {
+    chunks.push(chunk);
+  }
+  const buffer = Buffer.concat(chunks);
+  
+  if (buffer.length < 50 * 1024) {
+    throw new Error(`Music file too small: ${buffer.length} bytes (minimum 50KB)`);
+  }
+  
+  fs.writeFileSync(destPath, buffer);
+  console.log('[MUSIC] downloadedBytes=' + buffer.length);
+  return buffer.length;
+}
+
+async function muxAudioVideo(videoPath, audioPath, outputPath) {
+  const ffmpeg = pickFfmpegPath();
+  const args = [
+    '-y',
+    '-i', videoPath,
+    '-stream_loop', '-1',
+    '-i', audioPath,
+    '-shortest',
+    '-c:v', 'copy',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    outputPath,
+  ];
+  
+  console.log('[MUSIC] ffmpegCmd=' + ffmpeg + ' ' + args.join(' '));
+  const result = await run(ffmpeg, args, { env: process.env });
+  return result;
 }
 
 // Generates a simple cinematic slideshow video
@@ -176,32 +322,107 @@ async function createMemoryRenderOnly(req, res) {
       aspectRatio = '16:9',
       frameRate = 24,
       context = '',
+      enableMusic = true,
     } = req.body || {};
 
-    if (!Array.isArray(photoKeys) || photoKeys.length < 1) {
-      return jsonError(res, 400, 'invalid_request', 'photoKeys must be a non-empty array');
+    // Validate photoKeys
+    if (!Array.isArray(photoKeys) || photoKeys.length < 2) {
+      return jsonError(res, 400, 'invalid_request', 'photoKeys must be an array with at least 2 items');
     }
     if (!photoKeys.every(isNonEmptyString)) {
       return jsonError(res, 400, 'invalid_request', 'photoKeys must be an array of strings');
     }
 
-    // Validate order: if missing or invalid, use default order [0, 1, 2, ..., n-1]
-    let finalOrder = order;
-    if (!Array.isArray(order) || !isValidPermutation(order, photoKeys.length)) {
-      console.log(`[CREATE_MEMORY] order missing or invalid, using default order [0..${photoKeys.length - 1}]`);
-      finalOrder = Array.from({ length: photoKeys.length }, (_, i) => i);
+    console.log(`[IMAGES] receivedKeys=${photoKeys.length}`);
+    console.log(`[IMAGES] first3Keys=${photoKeys.slice(0, 3).join(',')}`);
+
+    // Validate and download images
+    const usableImages = [];
+    const missingKeys = [];
+    
+    for (const key of photoKeys) {
+      if (!isImageKey(key)) {
+        console.warn(`[IMAGES] Skipping non-image key: ${key}`);
+        missingKeys.push(key);
+        continue;
+      }
+      
+      try {
+        // Test download to temp location first
+        const tempPath = path.join(os.tmpdir(), `test_${Date.now()}_${path.basename(key)}`);
+        await downloadImageFromS3(S3_BUCKET, key, tempPath);
+        
+        // Verify file exists and has content
+        const stat = await fsp.stat(tempPath);
+        if (stat.size > 0) {
+          usableImages.push(key);
+          // Clean up temp file
+          await fsp.unlink(tempPath).catch(() => {});
+        } else {
+          missingKeys.push(key);
+          await fsp.unlink(tempPath).catch(() => {});
+        }
+      } catch (err) {
+        console.error(`[IMAGES] Failed to download ${key}:`, err.message);
+        missingKeys.push(key);
+        return jsonError(res, 400, 'IMAGE_DOWNLOAD_FAILED', `Failed to download image: ${key}`, {
+          key,
+          reason: err.message,
+        });
+      }
     }
+
+    console.log(`[IMAGES] usableImages=${usableImages.length}`);
+    if (missingKeys.length > 0) {
+      console.log(`[IMAGES] missingKeys=${missingKeys.join(',')}`);
+    }
+
+    if (usableImages.length < 2) {
+      return jsonError(res, 400, 'NOT_ENOUGH_IMAGES', 'Not enough usable images', {
+        received: photoKeys.length,
+        usable: usableImages.length,
+      });
+    }
+
+    // Determine order
+    // Build mapping from original photoKeys indices to usableImages indices
+    const keyToUsableIndex = new Map();
+    usableImages.forEach((key, idx) => {
+      const origIdx = photoKeys.indexOf(key);
+      if (origIdx >= 0) {
+        keyToUsableIndex.set(origIdx, idx);
+      }
+    });
+
+    let finalOrder;
+    if (Array.isArray(order) && isValidPermutation(order, photoKeys.length)) {
+      // Map order indices (which reference photoKeys) to usableImages indices
+      finalOrder = order
+        .map((origIdx) => keyToUsableIndex.get(origIdx))
+        .filter((idx) => idx !== undefined);
+      
+      // If mapping resulted in fewer items, use default order
+      if (finalOrder.length !== usableImages.length) {
+        console.log(`[IMAGES] Order mapping incomplete, using default order`);
+        finalOrder = Array.from({ length: usableImages.length }, (_, i) => i);
+      }
+    } else {
+      // Storytelling order fallback: use input order (deterministic)
+      console.log(`[IMAGES] order missing or invalid, using input order [0..${usableImages.length - 1}]`);
+      finalOrder = Array.from({ length: usableImages.length }, (_, i) => i);
+    }
+
+    // Apply order to usable images
+    const orderedKeys = finalOrder.map((idx) => usableImages[idx]);
+
+    console.log(`[IMAGES] finalOrder=[${finalOrder.join(',')}]`);
 
     const fps = Number(frameRate);
     if (!Number.isFinite(fps) || fps < 1 || fps > 60) {
       return jsonError(res, 400, 'invalid_request', 'frameRate must be a number between 1 and 60');
     }
 
-    // Build ordered keys using finalOrder (validated or default)
-    const orderedKeys = finalOrder.map((i) => photoKeys[i]);
-
-    const jobId =
-      Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    const jobId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 
     const baseDir = path.join(os.tmpdir(), 'trace_jobs', jobId);
     const framesDir = path.join(baseDir, 'frames');
@@ -210,35 +431,72 @@ async function createMemoryRenderOnly(req, res) {
     await ensureDir(outDir);
 
     console.log(
-      `[CREATE_MEMORY] jobId=${jobId} photoKeys=${photoKeys.length} fps=${fps} aspect=${aspectRatio} contextLen=${String(context || '').length}`
+      `[CREATE_MEMORY] jobId=${jobId} photoKeys=${orderedKeys.length} fps=${fps} aspect=${aspectRatio} contextLen=${String(context || '').length}`
     );
 
     // Download images into frames as 0001.jpg, 0002.jpg...
     for (let idx = 0; idx < orderedKeys.length; idx++) {
       const key = orderedKeys[idx];
-
-      // Defensive: enforce drafts prefix if you want (optional)
-      // if (!key.startsWith('videos/drafts/')) { ... }
-
       const frameName = String(idx + 1).padStart(4, '0') + '.jpg';
       const dest = path.join(framesDir, frameName);
       console.log(`[CREATE_MEMORY] downloading ${key} -> ${frameName}`);
       await downloadImageFromS3(S3_BUCKET, key, dest);
     }
 
-    // Render
-    const outMp4 = path.join(outDir, 'final.mp4');
-    console.log(`[CREATE_MEMORY] ffmpeg start -> ${outMp4}`);
+    // Render silent video
+    const silentMp4 = path.join(outDir, 'silent.mp4');
+    console.log(`[CREATE_MEMORY] ffmpeg start -> ${silentMp4}`);
     await renderSlideshow({
       framesDir,
       frameCount: orderedKeys.length,
-      outPath: outMp4,
+      outPath: silentMp4,
       fps,
       aspectRatio,
     });
 
-    const stat = await fsp.stat(outMp4);
-    console.log(`[CREATE_MEMORY] ffmpeg done size=${stat.size} bytes`);
+    const silentStat = await fsp.stat(silentMp4);
+    console.log(`[CREATE_MEMORY] ffmpeg done size=${silentStat.size} bytes`);
+
+    // Music muxing
+    let finalMp4 = silentMp4;
+    let musicKeyUsed = null;
+
+    if (enableMusic) {
+      try {
+        // Select and download music
+        const musicKey = await selectMusicTrack(S3_BUCKET);
+        const musicPath = path.join(outDir, path.basename(musicKey));
+        await downloadMusicTrack(S3_BUCKET, musicKey, musicPath);
+
+        // Mux audio and video
+        finalMp4 = path.join(outDir, 'final_with_music.mp4');
+        console.log('[MUSIC] Starting mux...');
+        await muxAudioVideo(silentMp4, musicPath, finalMp4);
+        console.log('[MUSIC] Mux complete');
+
+        // Verify audio stream exists
+        const hasAudio = await ffprobeHasAudio(finalMp4);
+        console.log(`[MUSIC] ffprobeAudioStreams=${hasAudio ? 1 : 0}`);
+
+        if (!hasAudio) {
+          throw new Error('Muxed video has no audio stream');
+        }
+
+        musicKeyUsed = musicKey;
+        console.log('[MUSIC] Music mux successful');
+      } catch (musicErr) {
+        console.error('[MUSIC] Music mux failed:', musicErr.message);
+        console.error('[MUSIC] ffmpegExitCode=' + (musicErr.code || 'unknown'));
+        console.error('[MUSIC] stderrTail=' + (musicErr.stderr?.slice(-200) || ''));
+        return jsonError(res, 500, 'MUSIC_MUX_FAILED', 'Failed to add music to video', {
+          ffmpegExitCode: musicErr.code || 'unknown',
+          stderrTail: musicErr.stderr?.slice(-200) || musicErr.message,
+        });
+      }
+    }
+
+    const finalStat = await fsp.stat(finalMp4);
+    console.log(`[CREATE_MEMORY] Final video size=${finalStat.size} bytes`);
 
     // Upload to published
     const videoKey = `videos/published/${jobId}.mp4`;
@@ -247,23 +505,23 @@ async function createMemoryRenderOnly(req, res) {
     console.log(`[CREATE_MEMORY] S3_BUCKET=${S3_BUCKET}`);
     console.log(`[CREATE_MEMORY] AWS_REGION=${AWS_REGION}`);
     console.log(`[CREATE_MEMORY] videoKey=${videoKey}`);
-    console.log(`[CREATE_MEMORY] localFile=${outMp4}`);
-    console.log(`[CREATE_MEMORY] fileSize=${stat.size} bytes`);
-    
+    console.log(`[CREATE_MEMORY] localFile=${finalMp4}`);
+    console.log(`[CREATE_MEMORY] fileSize=${finalStat.size} bytes`);
+
     try {
-      await uploadFileToS3(S3_BUCKET, videoKey, outMp4, 'video/mp4');
+      await uploadFileToS3(S3_BUCKET, videoKey, finalMp4, 'video/mp4');
       console.log(`[CREATE_MEMORY] S3_UPLOAD_SUCCESS key=${videoKey}`);
     } catch (uploadError) {
       console.error(`[CREATE_MEMORY] S3_UPLOAD_FAILED key=${videoKey}`);
       console.error(`[CREATE_MEMORY] uploadError=${uploadError.message || uploadError}`);
       console.error(`[CREATE_MEMORY] uploadErrorCode=${uploadError.code || 'unknown'}`);
       console.error(`[CREATE_MEMORY] uploadErrorName=${uploadError.name || 'unknown'}`);
-      throw uploadError; // Re-throw to be caught by outer catch
+      throw uploadError;
     }
-    
+
     console.log(`[CREATE_MEMORY] ========================================`);
 
-    // Optional: return a short-lived signed URL so frontend can play immediately
+    // Return signed URL
     const playbackUrl = await getSignedUrl(
       s3,
       new GetObjectCommand({ Bucket: S3_BUCKET, Key: videoKey }),
@@ -280,6 +538,9 @@ async function createMemoryRenderOnly(req, res) {
       jobId,
       videoKey,
       playbackUrl,
+      imageCountUsed: orderedKeys.length,
+      orderUsed: finalOrder,
+      musicKeyUsed: musicKeyUsed,
     });
   } catch (err) {
     console.error('[CREATE_MEMORY] ERROR', err?.message || err, err?.stderr || '');
@@ -288,4 +549,3 @@ async function createMemoryRenderOnly(req, res) {
 }
 
 export { createMemoryRenderOnly };
-
