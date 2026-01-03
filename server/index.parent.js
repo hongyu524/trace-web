@@ -3453,14 +3453,14 @@ app.post('/api/media/presign-upload', async (req, res) => {
       return res.status(400).json({ error: 'Invalid contentType. Must be an image type.' });
     }
 
-    // Generate unique key: uploads/<timestamp>-<uuid>.<ext>
+    // Generate unique key: videos/drafts/<timestamp>-<uuid>.<ext>
     const timestamp = Date.now();
     const uuid = crypto.randomUUID();
     const ext = path.extname(fileName) || '.jpg';
-    const key = `uploads/${timestamp}-${uuid}${ext}`;
+    const key = `videos/drafts/${timestamp}-${uuid}${ext}`;
 
     // Generate presigned PUT URL (expires in 5 minutes)
-    const putUrl = await getSignedUrl(
+    const url = await getSignedUrl(
       s3,
       new PutObjectCommand({
         Bucket: S3_BUCKET,
@@ -3478,8 +3478,8 @@ app.post('/api/media/presign-upload', async (req, res) => {
     console.log(`[PRESIGN_UPLOAD] Generated presigned PUT URL for key: ${key}`);
 
     return res.json({
+      url,
       key,
-      putUrl,
     });
   } catch (err) {
     console.error('[PRESIGN_UPLOAD] Error:', err);
