@@ -88,6 +88,8 @@ export default function UploadFlow() {
       }));
 
       console.log('[UploadFlow] Calling Vercel: /api/sequence');
+      console.log('[UploadFlow] Images to send:', sequenceImages.length);
+      console.log('[UploadFlow] Image format:', sequenceImages[0]?.base64 ? 'base64' : sequenceImages[0]?.url ? 'url' : 'unknown');
       let optimalOrder: number[];
       try {
         const sequenceResponse = await getImageSequence(
