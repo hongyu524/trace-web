@@ -447,6 +447,13 @@ async function createMemoryRenderOnly(req, res) {
     console.log('[IMAGES] first3Keys=', Array.isArray(photoKeys) ? photoKeys.slice(0, 3) : null);
     console.log('[IMAGES] last3Keys=', Array.isArray(photoKeys) ? photoKeys.slice(-3) : null);
 
+    // Normalize aspectRatio and fps
+    const aspectRatio = normalizeAspectRatio(rawAspectRatio);
+    const fps = normalizeFps(rawFps || rawFrameRate);
+    
+    console.log('[CREATE_MEMORY] normalized aspectRatio =', aspectRatio);
+    console.log('[CREATE_MEMORY] normalized fps =', fps);
+
     // Validate photoKeys
     if (!Array.isArray(photoKeys) || photoKeys.length < 2) {
       return jsonError(res, 400, 'invalid_request', 'photoKeys must be an array with at least 2 items');
