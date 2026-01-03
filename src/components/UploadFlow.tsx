@@ -2,7 +2,11 @@
 import VideoPreview from "./VideoPreview";
 import { getSequenceOrder, createMemoryRender, getPresignedUploadUrl, uploadFileToS3 } from "../utils/api";
 
-export default function UploadFlow() {
+interface UploadFlowProps {
+  onBack?: () => void;
+}
+
+export default function UploadFlow({ onBack }: UploadFlowProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<string[]>([]);
   const [promptText, setPromptText] = useState<string>("");
@@ -201,7 +205,30 @@ export default function UploadFlow() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 bg-gradient-to-b from-black via-gray-900 to-black py-12">
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 bg-gradient-to-b from-black via-gray-900 to-black py-12 relative">
+      {/* Back Button */}
+      {onBack && (
+        <button
+          onClick={onBack}
+          className="absolute top-6 left-6 text-gray-400 hover:text-white transition-colors flex items-center space-x-2 z-10"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          <span>Back</span>
+        </button>
+      )}
+      
+      {/* Logo (optional - keeping it subtle) */}
+      <div className="absolute top-6 right-6 flex items-center space-x-2">
+        <div className="w-6 h-6 flex items-center justify-center">
+          <div className="w-5 h-5 border-2 border-cyan-400 border-t-0 border-b-0">
+            <div className="w-full h-full border-l-2 border-r-2 border-cyan-400"></div>
+          </div>
+        </div>
+        <span className="text-sm font-semibold text-cyan-400">TRACE</span>
+      </div>
+
       <div className="max-w-4xl w-full space-y-8">
         <div className="text-center space-y-4">
           <h1 className="text-3xl font-light text-white">Create Your Memory</h1>

@@ -1,16 +1,62 @@
 ﻿import { useState } from "react";
 import LandingPage from "./components/LandingPage";
 import UploadFlow from "./components/UploadFlow";
+import PricingPage from "./components/PricingPage";
+import EnterprisePage from "./components/EnterprisePage";
+import CommunityPage from "./components/CommunityPage";
+import Header from "./components/Header";
 import "./index.css";
 
-function App() {
-  const [showUpload, setShowUpload] = useState(false);
+type Page = 'landing' | 'upload' | 'pricing' | 'enterprise' | 'community';
 
-  if (showUpload) {
-    return <UploadFlow />;
+function App() {
+  const [currentPage, setCurrentPage] = useState<Page>('landing');
+
+  const handleNavigate = (page: Page) => {
+    setCurrentPage(page);
+  };
+
+  const handleBack = () => {
+    setCurrentPage('landing');
+  };
+
+  if (currentPage === 'upload') {
+    return <UploadFlow onBack={handleBack} />;
   }
 
-  return <LandingPage onStart={() => setShowUpload(true)} />;
+  if (currentPage === 'pricing') {
+    return (
+      <>
+        <Header onNavigate={handleNavigate} />
+        <PricingPage onBack={handleBack} />
+      </>
+    );
+  }
+
+  if (currentPage === 'enterprise') {
+    return (
+      <>
+        <Header onNavigate={handleNavigate} />
+        <EnterprisePage onBack={handleBack} />
+      </>
+    );
+  }
+
+  if (currentPage === 'community') {
+    return (
+      <>
+        <Header onNavigate={handleNavigate} />
+        <CommunityPage onBack={handleBack} />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Header onNavigate={handleNavigate} />
+      <LandingPage onStart={() => setCurrentPage('upload')} />
+    </>
+  );
 }
 
 export default App;
