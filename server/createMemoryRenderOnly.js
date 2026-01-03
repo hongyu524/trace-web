@@ -3,6 +3,7 @@ import fsp from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { spawn } from 'child_process';
+import crypto from 'crypto';
 
 import { S3Client, GetObjectCommand, PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -458,21 +459,29 @@ async function createMemoryRenderOnly(req, res) {
     const silentStat = await fsp.stat(silentMp4);
     console.log(`[CREATE_MEMORY] ffmpeg done size=${silentStat.size} bytes`);
 
-    // Music muxing
-    let finalMp4 = silentMp4;
+    // Get video duration for fades and music muxing
+    const videoDuration = await getVideoDuration(silentMp4);
+    console.log(`[VIDEO] Silent video duration=${videoDuration.toFixed(2)}s`);
+
+    // Apply video fades to silent video first
+    const videoWithFades = path.join(outDir, 'video_with_fades.mp4');
+    await applyFades(silentMp4, videoWithFades, videoDuration);
+
+    // Music muxing (with audio fades)
+    let finalMp4 = videoWithFades;
     let musicKeyUsed = null;
 
     if (enableMusic) {
       try {
         // Select and download music
-        const musicKey = await selectMusicTrack(S3_BUCKET);
+        const musicKey = await selectMusicTrack(S3_BUCKET, context, photoKeys);
         const musicPath = path.join(outDir, path.basename(musicKey));
         await downloadMusicTrack(S3_BUCKET, musicKey, musicPath);
 
-        // Mux audio and video
+        // Mux audio and video (with audio fades)
         finalMp4 = path.join(outDir, 'final_with_music.mp4');
         console.log('[MUSIC] Starting mux...');
-        await muxAudioVideo(silentMp4, musicPath, finalMp4);
+        await muxAudioVideo(videoWithFades, musicPath, finalMp4, videoDuration);
         console.log('[MUSIC] Mux complete');
 
         // Verify audio stream exists
