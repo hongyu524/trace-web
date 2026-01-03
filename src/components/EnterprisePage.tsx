@@ -115,7 +115,11 @@ export default function EnterprisePage({ onBack }: EnterprisePageProps) {
             </ul>
             <a
               href="mailto:hesra.tech@gmail.com?subject=Trace Enterprise Inquiry&body=Hello Hesra team,%0D%0A%0D%0AI'm interested in learning more about Trace Enterprise solutions.%0D%0A%0D%0APlease contact me at your earliest convenience.%0D%0A%0D%0AThank you!"
-              className="inline-block px-6 py-3 bg-cyan-500 text-black font-semibold rounded-sm hover:bg-cyan-400 transition-colors"
+              className="inline-block px-6 py-3 bg-cyan-500 text-black font-semibold rounded-sm hover:bg-cyan-400 transition-colors cursor-pointer"
+              onClick={(e) => {
+                // Ensure mailto link works
+                window.location.href = 'mailto:hesra.tech@gmail.com?subject=Trace Enterprise Inquiry&body=Hello Hesra team,%0D%0A%0D%0AI\'m interested in learning more about Trace Enterprise solutions.%0D%0A%0D%0APlease contact me at your earliest convenience.%0D%0A%0D%0AThank you!';
+              }}
             >
               Contact Us
             </a>
