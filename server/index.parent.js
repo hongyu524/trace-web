@@ -2133,8 +2133,24 @@ app.options('/api/create-memory', (req, res) => {
 });
 
 app.post('/api/create-memory', async (req, res) => {
-  const { createMemoryRenderOnly } = await import('./createMemoryRenderOnly.js');
-  return createMemoryRenderOnly(req, res);
+  // Set CORS headers immediately, before lazy import
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', 'https://tracememory.store');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Vary', 'Origin');
+  
+  try {
+    const { createMemoryRenderOnly } = await import('./createMemoryRenderOnly.js');
+    return createMemoryRenderOnly(req, res);
+  } catch (error) {
+    console.error('[CREATE_MEMORY] Failed to load handler:', error);
+    return res.status(500).json({ error: 'Failed to load render handler', details: error.message });
+  }
 });
 
 // OLD ENDPOINT (kept for reference, no longer used - route is overridden above):
