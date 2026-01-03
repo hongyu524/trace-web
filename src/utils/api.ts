@@ -47,6 +47,15 @@ export type SequenceResponse = {
   rationale?: string;
 };
 
+export type CreateMemoryResponse = {
+  ok: boolean;
+  jobId?: string;
+  videoKey?: string;
+  playbackUrl?: string;
+  error?: string;
+  detail?: string;
+};
+
 export type SequenceImage = {
   id: string;
   url?: string;
