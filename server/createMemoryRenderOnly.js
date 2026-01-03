@@ -3,7 +3,6 @@ import fsp from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { spawn } from 'child_process';
-import crypto from 'crypto';
 
 import { S3Client, GetObjectCommand, PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -144,7 +143,17 @@ function parseManifest(manifestBuf) {
   }
 }
 
-async function selectMusicTrack(bucket, musicPrefix = 'music/') {
+function simpleHash(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return Math.abs(hash);
+}
+
+async function selectMusicTrack(bucket, context = '', photoKeys = [], musicPrefix = 'music/') {
   console.log('[MUSIC] enabled=true');
   
   // Try manifest first
@@ -195,10 +204,14 @@ async function selectMusicTrack(bucket, musicPrefix = 'music/') {
     throw new Error('No music tracks available in S3');
   }
   
-  // Select deterministically (use first track for simplicity - can be improved)
-  const selected = tracks[0];
+  // Select deterministically using stable hash
+  const seedString = context + photoKeys.join('|');
+  const seed = simpleHash(seedString);
+  const index = seed % tracks.length;
+  const selected = tracks[index];
   const selectedKey = selected.key || selected;
-  console.log('[MUSIC] selectedKey=' + selectedKey);
+  
+  console.log('[MUSIC] seed=' + seed + ' index=' + index + ' candidates=' + tracks.length + ' selectedKey=' + selectedKey);
   
   return selectedKey;
 }
@@ -222,8 +235,55 @@ async function downloadMusicTrack(bucket, key, destPath) {
   return buffer.length;
 }
 
-async function muxAudioVideo(videoPath, audioPath, outputPath) {
+async function getVideoDuration(videoPath) {
+  const ffprobe = pickFfprobePath();
+  try {
+    const { stdout } = await run(ffprobe, [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      videoPath,
+    ]);
+    return parseFloat(stdout) || 0;
+  } catch (err) {
+    console.warn('[VIDEO] Could not determine duration:', err.message);
+    return 0;
+  }
+}
+
+async function applyFades(inputVideoPath, outputPath, duration) {
   const ffmpeg = pickFfmpegPath();
+  const fadeIn = 0.6;
+  const fadeOut = 0.8;
+  
+  // Video fade: fade in from black, fade out to black
+  const videoFilter = `fade=t=in:st=0:d=${fadeIn},fade=t=out:st=${Math.max(0, duration - fadeOut)}:d=${fadeOut}`;
+  
+  const args = [
+    '-y',
+    '-i', inputVideoPath,
+    '-vf', videoFilter,
+    '-c:v', 'libx264',
+    '-c:a', 'copy', // Copy audio as-is (fades applied separately)
+    outputPath,
+  ];
+  
+  console.log('[FADE] videoFadeIn=' + fadeIn + ' videoFadeOut=' + fadeOut + ' duration=' + duration);
+  const result = await run(ffmpeg, args, { env: process.env });
+  return result;
+}
+
+async function muxAudioVideo(videoPath, audioPath, outputPath, videoDuration) {
+  const ffmpeg = pickFfmpegPath();
+  
+  // Audio fade parameters
+  const audioFadeIn = 0.7;
+  const audioFadeOut = Math.min(1.5, Math.max(0.3, videoDuration * 0.1)); // Clamp fade-out, at least 0.3s
+  const audioFadeOutStart = Math.max(0, videoDuration - audioFadeOut);
+  
+  // Audio filter: fade in and fade out
+  const audioFilter = `afade=t=in:st=0:d=${audioFadeIn},afade=t=out:st=${audioFadeOutStart}:d=${audioFadeOut}`;
+  
   const args = [
     '-y',
     '-i', videoPath,
@@ -231,11 +291,13 @@ async function muxAudioVideo(videoPath, audioPath, outputPath) {
     '-i', audioPath,
     '-shortest',
     '-c:v', 'copy',
+    '-filter:a', audioFilter,
     '-c:a', 'aac',
     '-b:a', '192k',
     outputPath,
   ];
   
+  console.log('[FADE] audioFadeIn=' + audioFadeIn + ' audioFadeOut=' + audioFadeOut + ' duration=' + videoDuration);
   console.log('[MUSIC] ffmpegCmd=' + ffmpeg + ' ' + args.join(' '));
   const result = await run(ffmpeg, args, { env: process.env });
   return result;
