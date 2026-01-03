@@ -3,6 +3,9 @@
  * Generates per-image motion with cinematic timing + motivated presets
  */
 
+// Import documentary motion pack
+import * as documentaryPack from './motion-pack-documentary.js';
+
 /**
  * Calculate safe margin for pan movement after applying zoom/scale
  * @param {number} srcW - Source image width
@@ -149,16 +152,129 @@ function generatePresetParameters(preset, isHero, safeMargin, outW, outH) {
 }
 
 /**
+ * Generate motion plan using documentary pack
+ * @param {Array<Object>} analysisResults - Vision analysis results (Stage 1)
+ * @param {Object} sequencePlan - Sequence plan with ordered_ids and shots (Stage 2)
+ * @param {number} outputWidth - Output video width
+ * @param {number} outputHeight - Output video height
+ * @returns {Array<Object>} Motion plan array, one per image in order
+ */
+function generateDocumentaryMotionPlan(analysisResults, sequencePlan, outputWidth = 1920, outputHeight = 1080) {
+  console.log(`[MOTION-PLANNING] Using Documentary motion pack`);
+  
+  const motionPlan = [];
+  const totalImages = sequencePlan.ordered_ids.length;
+  const config = documentaryPack.getDocumentaryDefaults();
+  
+  // Track previous presets for anti-repeat logic
+  let previousPreset = null;
+  let previousPreviousPreset = null;
+  
+  // Generate motion for each image in sequence order
+  for (let i = 0; i < totalImages; i++) {
+    const imageId = sequencePlan.ordered_ids[i];
+    const analysis = analysisResults[imageId];
+    
+    if (!analysis) {
+      throw new Error(`Missing analysis for image ID ${imageId}`);
+    }
+    
+    // Get image dimensions
+    const srcW = analysis.width || 1920;
+    const srcH = analysis.height || 1080;
+    
+    // Calculate position in sequence (0.0 to 1.0)
+    const position = totalImages > 1 ? i / (totalImages - 1) : 0.5;
+    
+    // Create shot metadata for documentary pack
+    const shotMeta = {
+      position,
+      index: i,
+      totalShots: totalImages,
+      frameWidth: outputWidth,
+      frameHeight: outputHeight,
+      previousPreset,
+      previousPreviousPreset,
+    };
+    
+    // Pick documentary preset
+    const seed = 12345 + i * 7919; // Deterministic seed
+    const rng = new documentaryPack.SeededRNG(seed);
+    const preset = documentaryPack.pickDocumentaryPreset(shotMeta, rng, config);
+    
+    // Convert documentary preset to motion parameters
+    const motionParams = documentaryPack.convertDocumentaryPresetToMotionParams(
+      preset,
+      outputWidth,
+      outputHeight,
+      seed,
+      config
+    );
+    
+    // Map documentary preset name to movementType (lowercase)
+    let movementType = preset.toLowerCase();
+    
+    // Map lateral drift to pan movement type
+    if (preset === 'LATERAL_DRIFT_L' || preset === 'LATERAL_DRIFT_R') {
+      movementType = 'slow_pan';
+    }
+    
+    motionPlan.push({
+      imageId,
+      filename: analysis.filename,
+      movementType,
+      zoomStart: motionParams.zoomStart,
+      zoomEnd: motionParams.zoomEnd,
+      panXPercent: motionParams.panXPercent,
+      panYPercent: motionParams.panYPercent,
+      panAxis: motionParams.panAxis,
+      isHero: i === 0, // First image is hero
+      preset: preset, // Store original preset name for reference
+    });
+    
+    // Update previous preset tracking
+    previousPreviousPreset = previousPreset;
+    previousPreset = preset;
+  }
+  
+  // Validate motion plan coverage
+  if (motionPlan.length !== totalImages) {
+    throw new Error(
+      `Documentary motion plan incomplete: ${motionPlan.length}/${totalImages} images planned`
+    );
+  }
+  
+  // Log distribution statistics
+  const presetCounts = {};
+  motionPlan.forEach(m => {
+    const p = m.preset || m.movementType.toUpperCase();
+    presetCounts[p] = (presetCounts[p] || 0) + 1;
+  });
+  console.log(`[MOTION-PLANNING] Documentary pack distribution:`, presetCounts);
+  const staticCount = presetCounts['STATIC'] || 0;
+  const staticPercent = ((staticCount / totalImages) * 100).toFixed(1);
+  console.log(`[MOTION-PLANNING] Static shots: ${staticCount}/${totalImages} (${staticPercent}%)`);
+  
+  return motionPlan;
+}
+
+/**
  * Generate motion plan for all images (Stage 3)
  * @param {Array<Object>} analysisResults - Vision analysis results (Stage 1)
  * @param {Object} sequencePlan - Sequence plan with ordered_ids and shots (Stage 2)
  * @param {Object} storyLock - Story lock object with hero_images and theme
  * @param {number} outputWidth - Output video width
  * @param {number} outputHeight - Output video height
+ * @param {string} motionPack - Motion pack type: 'default' | 'documentary' (default: 'default')
  * @returns {Array<Object>} Motion plan array, one per image in order
  */
-export function generateMotionPlan(analysisResults, sequencePlan, storyLock = null, outputWidth = 1920, outputHeight = 1080) {
-  console.log(`[MOTION-PLANNING] Generating motion plan for ${sequencePlan.ordered_ids.length} images (output: ${outputWidth}x${outputHeight})...`);
+export function generateMotionPlan(analysisResults, sequencePlan, storyLock = null, outputWidth = 1920, outputHeight = 1080, motionPack = 'default') {
+  console.log(`[MOTION-PLANNING] Generating motion plan for ${sequencePlan.ordered_ids.length} images (output: ${outputWidth}x${outputHeight}, pack: ${motionPack})...`);
+  
+  // Use documentary pack if requested
+  if (motionPack === 'documentary') {
+    return generateDocumentaryMotionPlan(analysisResults, sequencePlan, outputWidth, outputHeight);
+  }
   
   const motionPlan = [];
   const totalImages = sequencePlan.ordered_ids.length;

@@ -6,6 +6,7 @@ import { spawn } from 'child_process';
 
 import { S3Client, GetObjectCommand, PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { createFramePlan, applyFramePlan, createFramePlansBatch } from './auto-reframe.js';
 
 // -------------------- Config --------------------
 const AWS_REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-2';
@@ -453,6 +454,22 @@ function normalizeAspectRatio(input) {
   return '16:9';
 }
 
+/**
+ * Convert aspect ratio string (e.g., "16:9") to numeric value (e.g., 1.777)
+ */
+function aspectRatioToNumber(aspectRatioStr) {
+  const ratioMatch = aspectRatioStr.match(/^(\d+(?:\.\d+)?)[:\/](\d+(?:\.\d+)?)$/);
+  if (ratioMatch) {
+    const num = parseFloat(ratioMatch[1]);
+    const den = parseFloat(ratioMatch[2]);
+    if (den > 0) {
+      return num / den;
+    }
+  }
+  // Default to 16:9
+  return 16 / 9;
+}
+
 function normalizeFps(input) {
   if (typeof input === 'number' && Number.isFinite(input)) {
     return Math.max(1, Math.min(60, Math.round(input)));
@@ -493,6 +510,8 @@ async function createMemoryRenderOnly(req, res) {
       frameRate: rawFrameRate, // Accept both fps and frameRate for compatibility
       context = '',
       enableMusic = true,
+      motionPack = 'default',
+      autoReframe = true, // Default true
     } = req.body || {};
 
     // Comprehensive logging at handler start
@@ -515,6 +534,8 @@ async function createMemoryRenderOnly(req, res) {
     
     console.log('[CREATE_MEMORY] normalized aspectRatio =', aspectRatio);
     console.log('[CREATE_MEMORY] normalized fps =', fps);
+    console.log('[CREATE_MEMORY] motionPack =', motionPack);
+    console.log('[CREATE_MEMORY] autoReframe =', autoReframe);
 
     // Validate photoKeys
     if (!Array.isArray(photoKeys) || photoKeys.length < 2) {
@@ -678,16 +699,73 @@ async function createMemoryRenderOnly(req, res) {
       await downloadImageFromS3(S3_BUCKET, key, dest);
     }
 
+    // Auto-reframe images: fix orientation and compute smart crops
+    let renderFramesDir = framesDir;
+    const reframeNeedsReview = []; // Collect images that need review
+    if (autoReframe) {
+      const normalizedFramesDir = path.join(framesDir, 'normalized');
+      await ensureDir(normalizedFramesDir);
+      const targetAspectNum = aspectRatioToNumber(aspectRatio);
+      
+      // Read images as buffers, create frame plans, and apply them
+      for (let idx = 0; idx < orderedKeys.length; idx++) {
+        const key = orderedKeys[idx];
+        const frameName = String(idx + 1).padStart(4, '0') + '.jpg';
+        const originalPath = path.join(framesDir, frameName);
+        const normalizedPath = path.join(normalizedFramesDir, frameName);
+        
+        try {
+          const imageBuffer = await fsp.readFile(originalPath);
+          const plan = await createFramePlan(imageBuffer, targetAspectNum, {
+            imageKey: key, // Use S3 key for caching
+            confidenceThreshold: 0.55,
+            headroomBias: 0.075,
+            highConfidenceThreshold: 0.75,
+          });
+          
+          // Collect needsReview items for response
+          if (plan.needsReview) {
+            reframeNeedsReview.push({
+              imageKey: key,
+              confidence: plan.confidence,
+              reason: plan.reason,
+              safeModeUsed: plan.safeModeUsed || false,
+            });
+          }
+          
+          // Log only if needsReview or confidence below threshold
+          if (plan.needsReview || plan.confidence < 0.55) {
+            console.log(`[AUTO-REFRAme] [${idx + 1}/${orderedKeys.length}] ${key} rotation=${plan.rotationDeg}° crop=${plan.crop.w}x${plan.crop.h} confidence=${plan.confidence.toFixed(2)} ${plan.needsReview ? '[NEEDS_REVIEW]' : ''} ${plan.safeModeUsed ? '[SAFE_MODE]' : ''}`);
+          }
+          
+          // Apply frame plan (rotate + crop)
+          const reframedBuffer = await applyFramePlan(imageBuffer, plan);
+          // Write to normalized path (do not overwrite original)
+          await fsp.writeFile(normalizedPath, reframedBuffer);
+        } catch (err) {
+          console.error(`[AUTO-REFRAme] Error processing ${key}:`, err.message);
+          // Copy original to normalized path if reframing fails
+          await fsp.copyFile(originalPath, normalizedPath).catch(() => {});
+        }
+      }
+      
+      // Use normalized frames directory for rendering
+      renderFramesDir = normalizedFramesDir;
+      
+      // TEMPORARY LOGGING: Count needsReview
+      console.log(`[CREATE_MEMORY] reframeNeedsReview count = ${reframeNeedsReview.length}`);
+    }
+
     // Render silent video
     const silentMp4 = path.join(outDir, 'silent.mp4');
     console.log(`[CREATE_MEMORY] ========================================`);
     console.log(`[CREATE_MEMORY] RENDER_START`);
     console.log(`[CREATE_MEMORY] orderedKeys.length = ${orderedKeys.length}`);
-    console.log(`[CREATE_MEMORY] framesDir = ${framesDir}`);
+    console.log(`[CREATE_MEMORY] framesDir = ${renderFramesDir}`);
     console.log(`[CREATE_MEMORY] ffmpeg start -> ${silentMp4}`);
     
     await renderSlideshow({
-      framesDir,
+      framesDir: renderFramesDir,
       frameCount: orderedKeys.length,
       outPath: silentMp4,
       fps,
@@ -884,6 +962,7 @@ async function createMemoryRenderOnly(req, res) {
       musicKeyUsed: musicKeyUsed,
       aspectRatioUsed: aspectRatio,
       fpsUsed: fps,
+      reframeNeedsReview: reframeNeedsReview.length > 0 ? reframeNeedsReview : undefined,
     });
   } catch (err) {
     console.error('[CREATE_MEMORY] ERROR', err?.message || err, err?.stderr || '');

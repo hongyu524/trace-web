@@ -4,7 +4,7 @@ interface LandingPageProps {
 
 export default function LandingPage({ onStart }: LandingPageProps) {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 bg-gradient-to-b from-black via-gray-900 to-black">
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 bg-gradient-to-b from-black via-gray-900 to-black pt-20">
       <div className="max-w-2xl w-full text-center space-y-12">
         <div className="space-y-6">
           <div className="flex flex-col items-center justify-center">
