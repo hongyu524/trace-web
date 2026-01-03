@@ -3463,21 +3463,7 @@ app.get('/api/media/signed-url', async (req, res) => {
 console.log('Registered: GET /api/media/signed-url');
 
 // Presigned PUT URL for photo uploads (client -> S3 direct upload)
-// Handle OPTIONS preflight requests
-app.options('/api/media/presign-upload', (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', 'https://tracememory.store');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
-  res.status(204).end();
-});
-
 app.post('/api/media/presign-upload', async (req, res) => {
-  // Set CORS headers for the actual request
-  res.setHeader('Access-Control-Allow-Origin', 'https://tracememory.store');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
   try {
     const { fileName, contentType } = req.body;
 
