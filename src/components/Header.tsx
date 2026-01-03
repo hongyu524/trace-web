@@ -5,7 +5,7 @@ interface HeaderProps {
 export default function Header({ onNavigate }: HeaderProps) {
 
   return (
-    <header className="w-full border-b border-gray-900 bg-black/60 backdrop-blur-sm">
+    <header className="w-full border-b border-black/50 bg-black/90 backdrop-blur-sm">
       <nav className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
         {/* Empty left side for balance */}
         <div className="w-24"></div>
