@@ -16,14 +16,16 @@ import { getTemplate } from './templates/index.js';
 // Vision analysis and sequence planning moved to Vercel - Railway backend no longer handles OpenAI
 // import { analyzeAllImages } from './vision-analysis.js';
 // import { createSequencePlan } from './sequence-planning.js';
-import { generateMotionPlan } from './motion-planning.js';
-import { createStoryLock } from './story-lock.js';
-import { ProgressReporter, PROGRESS_WEIGHTS, calculateProgress } from './progress-reporter.js';
-import { signVideoPath } from './cloudfront-signer.js';
-import { finalizeForWeb, ffprobeInfo } from './utils/videoFinalize.js';
-import { inspectUploadedMp4 } from './utils/s3InspectMp4.js';
-import { signCloudFrontUrl, buildCloudFrontUrl } from './utils/cloudfrontSign.js';
-import { createMemoryRenderOnly } from './createMemoryRenderOnly.js';
+// Heavy imports moved to lazy-loading - only import when actually needed
+// This prevents cold start failures on Railway
+// import { generateMotionPlan } from './motion-planning.js';
+// import { createStoryLock } from './story-lock.js';
+// import { ProgressReporter, PROGRESS_WEIGHTS, calculateProgress } from './progress-reporter.js';
+// import { signVideoPath } from './cloudfront-signer.js';
+// import { finalizeForWeb, ffprobeInfo } from './utils/videoFinalize.js';
+// import { inspectUploadedMp4 } from './utils/s3InspectMp4.js';
+// import { signCloudFrontUrl, buildCloudFrontUrl } from './utils/cloudfrontSign.js';
+// import { createMemoryRenderOnly } from './createMemoryRenderOnly.js';
 
 // Promisify exec for ESM-safe usage
 const exec = promisify(execCb);
