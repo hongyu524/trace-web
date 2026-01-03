@@ -105,3 +105,4 @@ VITE_API_BASE_URL = https://your-railway-service.railway.app
 - `server/package.json` - Backend dependencies and start script
 - `server/index.js` - Backend entry point
 
+
