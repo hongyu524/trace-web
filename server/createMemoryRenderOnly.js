@@ -1,13 +1,11 @@
-'use strict';
+import fs from 'fs';
+import fsp from 'fs/promises';
+import path from 'path';
+import os from 'os';
+import { spawn } from 'child_process';
 
-const fs = require('fs');
-const fsp = require('fs/promises');
-const path = require('path');
-const os = require('os');
-const { spawn } = require('child_process');
-
-const { S3Client, GetObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
-const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // -------------------- Config --------------------
 const AWS_REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-2';
