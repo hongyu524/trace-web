@@ -458,3 +458,24 @@ export function getCacheStats() {
     maxSize: MAX_CACHE_SIZE,
   };
 }
+
+/**
+ * Create frame plans for multiple images in batch
+ * @param {Array<{buffer: Buffer, imageKey?: string, targetAspect?: number, opts?: Object}>} inputs - Array of inputs
+ * @param {number} defaultTargetAspect - Default target aspect ratio if not specified per input
+ * @returns {Promise<Array<FramePlan>>} Array of frame plans
+ */
+export async function createFramePlansBatch(inputs, defaultTargetAspect = 16 / 9) {
+  const plans = await Promise.all(
+    inputs.map(async (input) => {
+      const buffer = input.buffer;
+      const targetAspect = input.targetAspect ?? defaultTargetAspect;
+      const opts = input.opts || {};
+      if (input.imageKey) {
+        opts.imageKey = input.imageKey;
+      }
+      return createFramePlan(buffer, targetAspect, opts);
+    })
+  );
+  return plans;
+}
