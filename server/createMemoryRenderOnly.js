@@ -245,8 +245,26 @@ async function createMemoryRenderOnly(req, res) {
 
     // Upload to published
     const videoKey = `videos/published/${jobId}.mp4`;
-    console.log(`[CREATE_MEMORY] uploading -> s3://${S3_BUCKET}/${videoKey}`);
-    await uploadFileToS3(S3_BUCKET, videoKey, outMp4, 'video/mp4');
+    console.log(`[CREATE_MEMORY] ========================================`);
+    console.log(`[CREATE_MEMORY] S3_UPLOAD_START`);
+    console.log(`[CREATE_MEMORY] S3_BUCKET=${S3_BUCKET}`);
+    console.log(`[CREATE_MEMORY] AWS_REGION=${AWS_REGION}`);
+    console.log(`[CREATE_MEMORY] videoKey=${videoKey}`);
+    console.log(`[CREATE_MEMORY] localFile=${outMp4}`);
+    console.log(`[CREATE_MEMORY] fileSize=${stat.size} bytes`);
+    
+    try {
+      await uploadFileToS3(S3_BUCKET, videoKey, outMp4, 'video/mp4');
+      console.log(`[CREATE_MEMORY] S3_UPLOAD_SUCCESS key=${videoKey}`);
+    } catch (uploadError) {
+      console.error(`[CREATE_MEMORY] S3_UPLOAD_FAILED key=${videoKey}`);
+      console.error(`[CREATE_MEMORY] uploadError=${uploadError.message || uploadError}`);
+      console.error(`[CREATE_MEMORY] uploadErrorCode=${uploadError.code || 'unknown'}`);
+      console.error(`[CREATE_MEMORY] uploadErrorName=${uploadError.name || 'unknown'}`);
+      throw uploadError; // Re-throw to be caught by outer catch
+    }
+    
+    console.log(`[CREATE_MEMORY] ========================================`);
 
     // Optional: return a short-lived signed URL so frontend can play immediately
     const playbackUrl = await getSignedUrl(
@@ -269,7 +287,6 @@ async function createMemoryRenderOnly(req, res) {
   } catch (err) {
     console.error('[CREATE_MEMORY] ERROR', err?.message || err, err?.stderr || '');
     return jsonError(res, 500, 'render_failed', err?.message || 'unknown_error');
-    );
   }
 }
 
