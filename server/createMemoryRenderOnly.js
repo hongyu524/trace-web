@@ -157,6 +157,7 @@ function jsonError(res, status, error, detail, extra = {}) {
 
 // -------------------- Main Handler --------------------
 async function createMemoryRenderOnly(req, res) {
+  console.log('[CREATE_MEMORY] render-only handler hit');
   try {
     if (!S3_BUCKET) {
       return jsonError(res, 500, 'server_misconfigured', 'Missing S3_BUCKET env var');
