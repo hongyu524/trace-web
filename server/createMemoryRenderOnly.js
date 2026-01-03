@@ -303,9 +303,9 @@ async function muxAudioVideo(videoPath, audioPath, outputPath, videoDuration) {
   return result;
 }
 
-// Generates a simple cinematic slideshow video
-// - scales/crops to 1920x1080 or 1080x1920 based on aspect
-// - uses 24fps default
+// Generates a cinematic slideshow video with xfade transitions
+// - scales/crops to target dimensions based on aspect ratio
+// - uses cumulative xfade offsets to ensure correct timeline duration
 async function renderSlideshow({
   framesDir,
   frameCount,
@@ -337,69 +337,95 @@ async function renderSlideshow({
   
   console.log(`[RENDER] aspectRatio=${aspectRatio} dimensions=${width}x${height} fps=${fps}`);
 
-  // Timing calculation: ensure balanced per-image durations
-  // T = target film duration, N = number of images, X = crossfade duration
+  // Timing calculation with deterministic filtergraph
+  // N = number of images, xf = crossfade duration
   const N = frameCount;
-  const xfade = 0.35; // Crossfade duration in seconds
+  const xf = 0.35; // Crossfade duration in seconds
   const targetDuration = Math.max(12, Math.min(30, N * 1.7)); // 9 images -> 15.3s
-  const hold = Math.max(0.9, (targetDuration - (N - 1) * xfade) / N);
-  const totalSeconds = Math.round(N * hold + (N - 1) * xfade);
+  const hold = Math.max(0.9, (targetDuration - (N - 1) * xf) / N);
+  const clipDur = hold + xf; // Each clip includes overlap room for xfade
+  
+  // Calculate cumulative offsets for xfade transitions
+  // Offset for transition i (from stream i to i+1): (i+1) * hold + i * xf
+  const offsets = [];
+  for (let i = 0; i < N - 1; i++) {
+    const offset = (i + 1) * hold + i * xf;
+    offsets.push(offset);
+  }
+  
+  // Expected total duration (for validation)
+  const expectedTotalSeconds = N * hold + (N - 1) * xf;
   
   // Fail-loud check: prevent hold from being too long
   if (hold > 3.0) {
     throw new Error(`HOLD_TOO_LONG_BUG: hold=${hold.toFixed(2)} for N=${N} targetDuration=${targetDuration.toFixed(2)}`);
   }
   
-  // Sanity checks
-  const timelineDiff = Math.abs(totalSeconds - targetDuration);
-  if (timelineDiff > 0.5) {
-    console.warn(`[PLAN] Timeline duration differs from target: totalSeconds=${totalSeconds} target=${targetDuration.toFixed(2)} diff=${timelineDiff.toFixed(2)}`);
-  }
-  
+  // Log plan
   console.log(`[PLAN] ========================================`);
   console.log(`[PLAN] RENDER_PLAN`);
-  console.log(`[PLAN] N=${N} targetDurationSec=${targetDuration.toFixed(2)} holdSec=${hold.toFixed(2)} xfadeSec=${xfade} totalSeconds=${totalSeconds}`);
-  console.log(`[PLAN] imageCountUsed=${N} clipCount=${N}`);
+  console.log(`[PLAN] N=${N} targetDurationSec=${targetDuration.toFixed(2)} holdSec=${hold.toFixed(2)} xfadeSec=${xf} clipDurSec=${clipDur.toFixed(2)}`);
+  console.log(`[PLAN] expectedTotalSeconds=${expectedTotalSeconds.toFixed(2)}`);
+  console.log(`[PLAN] inputCount=${N}`);
+  console.log(`[PLAN] offsets=[${offsets.map(o => o.toFixed(2)).join(', ')}]`);
+  console.log(`[PLAN] ========================================`);
 
-  // We create an input pattern 0001.jpg, 0002.jpg...
-  // Use -framerate to control image input rate; then enforce output fps
-  // We also apply scale + crop to fill frame.
-  const inputPattern = path.join(framesDir, '%04d.jpg');
+  // Build FFmpeg inputs (one per image)
+  // Note: We use loop/trim in the filtergraph, so inputs are just regular image inputs
+  const inputArgs = [];
+  for (let i = 0; i < N; i++) {
+    const frameNum = String(i + 1).padStart(4, '0');
+    const imagePath = path.join(framesDir, `${frameNum}.jpg`);
+    inputArgs.push('-i', imagePath);
+  }
 
-  const vf = [
-    `scale=${width}:${height}:force_original_aspect_ratio=increase`,
-    `crop=${width}:${height}`,
-    `fps=${fps}`,
-    `format=yuv420p`,
-  ].join(',');
-
-  // For image2 demuxer: -framerate controls input rate (images per second)
-  // To display N images over totalSeconds duration, input framerate should be N/totalSeconds
-  // This ensures all N images are read and displayed over the desired duration
-  const inputFramerate = N / totalSeconds;
+  // Build filtergraph: process each image, then chain xfade transitions
+  const filterParts = [];
+  
+  // Process each input image: loop, trim, scale, crop, fps, format
+  const baseFilter = `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=${fps},format=yuv420p`;
+  for (let i = 0; i < N; i++) {
+    filterParts.push(`[${i}:v]loop=loop=-1:size=1:start=0,trim=duration=${clipDur},setpts=PTS-STARTPTS,${baseFilter}[img${i}]`);
+  }
+  
+  // Chain xfade transitions with cumulative offsets
+  // First transition: [img0][img1]xfade=...:offset=offset0[xf0]
+  // Second: [xf0][img2]xfade=...:offset=offset1[xf1]
+  // etc.
+  if (N === 1) {
+    // Single image: no xfade needed
+    filterParts.push(`[img0]trim=duration=${hold}[out]`);
+  } else {
+    // First xfade
+    filterParts.push(`[img0][img1]xfade=transition=fade:duration=${xf}:offset=${offsets[0].toFixed(3)}[xf0]`);
+    
+    // Subsequent xfades (chain previous result with next image)
+    for (let i = 1; i < N - 1; i++) {
+      const prevLabel = i === 1 ? 'xf0' : `xf${i - 1}`;
+      filterParts.push(`[${prevLabel}][img${i + 1}]xfade=transition=fade:duration=${xf}:offset=${offsets[i].toFixed(3)}[xf${i}]`);
+    }
+    
+    // Final output label
+    const finalLabel = N === 2 ? 'xf0' : `xf${N - 2}`;
+    filterParts.push(`[${finalLabel}]trim=duration=${expectedTotalSeconds}[out]`);
+  }
+  
+  const filtergraph = filterParts.join(';');
   
   const args = [
     '-y',
     '-hide_banner',
-    '-loglevel',
-    'error',
-    // image2 demuxer: set input framerate to control image display duration
-    '-framerate',
-    String(inputFramerate),
-    '-i',
-    inputPattern,
-    '-t',
-    String(totalSeconds),
-    '-vf',
-    vf,
-    '-c:v',
-    'libx264',
-    '-pix_fmt',
-    'yuv420p',
+    '-loglevel', 'error',
+    ...inputArgs,
+    '-filter_complex', filtergraph,
+    '-map', '[out]',
+    '-c:v', 'libx264',
+    '-pix_fmt', 'yuv420p',
     outPath,
   ];
   
-  console.log(`[PLAN] FFmpeg args: inputFramerate=${inputFramerate.toFixed(3)} totalSeconds=${totalSeconds}`);
+  console.log(`[PLAN] FFmpeg inputCount=${N} offsets=[${offsets.map(o => o.toFixed(2)).join(',')}]`);
+  console.log(`[PLAN] FFmpeg filtergraph length=${filtergraph.length} chars`);
 
   return run(ffmpeg, args, { env: process.env });
 }
@@ -678,35 +704,37 @@ async function createMemoryRenderOnly(req, res) {
     const outputN = orderedKeys.length;
     const outputXfade = 0.35;
     const outputTargetDuration = Math.max(12, Math.min(30, outputN * 1.7));
-    const expectedMinDuration = outputTargetDuration - 0.5;
+    const outputHold = Math.max(0.9, (outputTargetDuration - (outputN - 1) * outputXfade) / outputN);
+    const expectedTotalSeconds = outputN * outputHold + (outputN - 1) * outputXfade;
+    const expectedMinDuration = expectedTotalSeconds - 0.5;
     
-    // Fail if duration is too short (especially for 9 images)
-    if (videoDuration < expectedMinDuration) {
-      console.error(`[CREATE_MEMORY] OUTPUT_VALIDATION_FAILED: videoDuration=${videoDuration.toFixed(2)}s < expectedMin=${expectedMinDuration.toFixed(2)}s for N=${outputN}`);
-      return jsonError(res, 500, 'OUTPUT_DURATION_TOO_SHORT', `Video duration ${videoDuration.toFixed(2)}s is too short for ${outputN} images (expected >= ${expectedMinDuration.toFixed(2)}s)`, {
-        ok: false,
-        error: 'OUTPUT_DURATION_TOO_SHORT',
-        videoDuration: videoDuration,
-        expectedMinDuration: expectedMinDuration,
-        imageCount: outputN,
-      });
+    // Calculate offsets for error reporting
+    const offsets = [];
+    for (let i = 0; i < outputN - 1; i++) {
+      offsets.push((i + 1) * outputHold + i * outputXfade);
     }
     
-    // Additional check: for 9 images, duration must be >= 10s
-    if (outputN >= 9 && videoDuration < 10) {
-      console.error(`[CREATE_MEMORY] OUTPUT_VALIDATION_FAILED: videoDuration=${videoDuration.toFixed(2)}s < 10s for N=${outputN}`);
-      return jsonError(res, 500, 'OUTPUT_DURATION_TOO_SHORT', `Video duration ${videoDuration.toFixed(2)}s is too short for ${outputN} images (must be >= 10s)`, {
+    // Fail if duration is too short
+    if (videoDuration < expectedMinDuration) {
+      console.error(`[CREATE_MEMORY] OUTPUT_VALIDATION_FAILED: videoDuration=${videoDuration.toFixed(2)}s < expectedMin=${expectedMinDuration.toFixed(2)}s for N=${outputN}`);
+      console.error(`[CREATE_MEMORY] DURATION_TOO_SHORT: actual=${videoDuration.toFixed(2)}s target=${outputTargetDuration.toFixed(2)}s expectedTotal=${expectedTotalSeconds.toFixed(2)}s hold=${outputHold.toFixed(2)}s xfade=${outputXfade}s`);
+      console.error(`[CREATE_MEMORY] offsets=[${offsets.map(o => o.toFixed(2)).join(',')}] inputCount=${outputN}`);
+      return jsonError(res, 500, 'DURATION_TOO_SHORT', `Video duration ${videoDuration.toFixed(2)}s is too short for ${outputN} images (expected >= ${expectedMinDuration.toFixed(2)}s)`, {
         ok: false,
-        error: 'OUTPUT_DURATION_TOO_SHORT',
-        videoDuration: videoDuration,
-        imageCount: outputN,
+        error: 'DURATION_TOO_SHORT',
+        actualDurationSec: parseFloat(videoDuration.toFixed(2)),
+        targetDurationSec: parseFloat(outputTargetDuration.toFixed(2)),
+        expectedTotalSeconds: parseFloat(expectedTotalSeconds.toFixed(2)),
+        holdSec: parseFloat(outputHold.toFixed(2)),
+        xfadeSec: outputXfade,
+        offsets: offsets.map(o => parseFloat(o.toFixed(2))),
+        ffmpegInputCount: outputN,
       });
     }
     
     console.log(`[CREATE_MEMORY] OUTPUT_VALIDATION_PASSED: duration=${videoDuration.toFixed(2)}s >= expectedMin=${expectedMinDuration.toFixed(2)}s`);
     console.log(`[CREATE_MEMORY] RENDER_COMPLETE`);
-    const outputHold = Math.max(0.9, (outputTargetDuration - (outputN - 1) * outputXfade) / outputN);
-    console.log(`[CREATE_MEMORY] plan: imageCountUsed=${outputN} targetDurationSec=${outputTargetDuration.toFixed(2)} holdSec=${outputHold.toFixed(2)} xfadeSec=${outputXfade}`);
+    console.log(`[CREATE_MEMORY] plan: imageCountUsed=${outputN} targetDurationSec=${outputTargetDuration.toFixed(2)} holdSec=${outputHold.toFixed(2)} xfadeSec=${outputXfade} expectedTotalSeconds=${expectedTotalSeconds.toFixed(2)}`);
 
     // Apply video fades to silent video first
     const videoWithFades = path.join(outDir, 'video_with_fades.mp4');
