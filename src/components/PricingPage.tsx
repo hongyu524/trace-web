@@ -117,6 +117,12 @@ export default function PricingPage({ onBack }: PricingPageProps) {
           <p>All plans include our signature cinematic memory film creation.</p>
           <p className="mt-2">Questions? <a href="#" className="text-cyan-400 hover:text-cyan-300">Contact us</a></p>
         </div>
+
+        <div className="mt-8 pt-8 border-t border-gray-800">
+          <p className="text-xs text-gray-500 text-center leading-relaxed max-w-2xl mx-auto">
+            Each memory is computationally generated. Free plans are limited to ensure quality and sustainability.
+          </p>
+        </div>
       </div>
     </div>
   );
