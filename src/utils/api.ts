@@ -337,6 +337,55 @@ function normalizeVideoPath(p: string): string {
   return p;
 }
 
+function isAlreadySignedUrl(u: string): boolean {
+  // CloudFront signed URL often contains these
+  return (
+    u.includes("Signature=") ||
+    u.includes("Key-Pair-Id=") ||
+    u.includes("Policy=") ||
+    // S3 presigned URLs
+    u.includes("X-Amz-Signature=") ||
+    u.includes("X-Amz-Credential=")
+  );
+}
+
+function toMediaPath(input: string): string | null {
+  // If it's a full URL, extract pathname
+  try {
+    const url = new URL(input);
+    return url.pathname.startsWith("/") ? url.pathname : `/${url.pathname}`;
+  } catch {
+    // Not a URL, assume it's already a path/key-ish
+    if (!input) return null;
+    if (input.startsWith("/")) return input;
+    return `/${input}`;
+  }
+}
+
+export async function resolvePlaybackUrl(playbackUrlOrPath: string): Promise<string> {
+  // If backend already gave us a signed URL, use it directly.
+  if (playbackUrlOrPath.startsWith("http") && isAlreadySignedUrl(playbackUrlOrPath)) {
+    return playbackUrlOrPath;
+  }
+
+  // Otherwise convert to a /videos/... path and sign it.
+  const path = toMediaPath(playbackUrlOrPath);
+
+  if (!path || !path.startsWith("/videos/")) {
+    throw new Error(`Invalid media path: ${path ?? "null"} (must start with /videos/)`);
+  }
+
+  const encoded = encodeURIComponent(path);
+  const res = await fetch(`${API_BASE}/api/media/signed-url?path=${encoded}`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to fetch signed URL (${res.status}): ${text}`);
+  }
+  const data = await res.json();
+  if (!data?.signedUrl) throw new Error("Missing signedUrl in response");
+  return data.signedUrl;
+}
+
 export async function fetchSignedVideoPayload(path: string, prefer?: string): Promise<SignedUrlPayload> {
   console.log('[API] Calling Railway backend for signed URL:', `${API_BASE}/api/media/signed-url`);
   const fixedPath = normalizeVideoPath(path);

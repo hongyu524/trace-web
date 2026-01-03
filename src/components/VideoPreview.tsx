@@ -1,15 +1,8 @@
 ﻿import { useEffect, useState, useRef } from "react";
-import { fetchSignedVideoPayload } from "../utils/api";
+import { resolvePlaybackUrl } from "../utils/api";
 
 console.log('[BOOT] VideoPreview loaded from', import.meta.url, 'MODE=', import.meta.env.MODE);
 
-type SignedPayload = {
-  signedUrl: string | null;
-  cdnUrl: string | null;
-  s3SignedUrl: string | null;
-  preferred: string | null;
-  resourcePath: string | null;
-};
 
 interface VideoPreviewProps {
   path?: string;
@@ -112,20 +105,17 @@ export default function VideoPreview({ path: propPath, memoryId, onBack }: Video
       try {
         setLoading(true);
         setError('');
-        console.log('[VIDEO] Fetching signed URL for path:', path);
-        let payload: SignedPayload;
+        console.log('[VIDEO] Resolving playback URL for:', path);
+        let playbackUrl: string;
         try {
-          payload = await fetchSignedVideoPayload(path, isDev ? 's3' : undefined);
-          console.log('[VIDEO] Got payload from API:', payload);
+          playbackUrl = await resolvePlaybackUrl(path);
+          console.log('[VIDEO] Resolved playback URL');
         } catch (apiError: any) {
-          console.error('[VIDEO] Failed to fetch signed URL from API:', apiError);
+          console.error('[VIDEO] Failed to resolve playback URL:', apiError);
           throw new Error(`Failed to get video URL: ${apiError.message || 'Unknown error'}`);
         }
-        const playbackUrl = isDev
-          ? (payload.s3SignedUrl || payload.signedUrl || payload.cdnUrl)
-          : (payload.cdnUrl || payload.signedUrl || payload.s3SignedUrl);
 
-        if (!playbackUrl) throw new Error('No playable URL from backend');
+        if (!playbackUrl) throw new Error('No playable URL resolved');
         if (isDev && playbackUrl.includes('cloudfront.net')) {
           throw new Error('DEV MODE VIOLATION: CloudFront URL attempted: ' + playbackUrl);
         }
