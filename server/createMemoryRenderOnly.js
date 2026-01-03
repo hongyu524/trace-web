@@ -499,15 +499,20 @@ async function createMemoryRenderOnly(req, res) {
     }
 
     console.log(`[IMAGES] usableImages=${usableImages.length}`);
+    
+    // Enforce all images must be used
+    if (usableImages.length !== photoKeys.length) {
+      const missing = photoKeys.filter(k => !usableImages.includes(k));
+      console.error(`[IMAGES] IMAGE_MISMATCH: requested=${photoKeys.length} usable=${usableImages.length} missing=${missing.slice(0, 5).join(', ')}`);
+      return jsonError(res, 400, 'IMAGE_MISMATCH', `Not all images could be processed: requested ${photoKeys.length}, usable ${usableImages.length}`, {
+        requestedImageCount: photoKeys.length,
+        usableImageCount: usableImages.length,
+        missingKeys: missing,
+      });
+    }
+    
     if (missingKeys.length > 0) {
       console.log(`[IMAGES] missingKeys=${missingKeys.join(',')}`);
-    }
-
-    if (usableImages.length < 2) {
-      return jsonError(res, 400, 'NOT_ENOUGH_IMAGES', 'Not enough usable images', {
-        received: photoKeys.length,
-        usable: usableImages.length,
-      });
     }
 
     // Determine order
