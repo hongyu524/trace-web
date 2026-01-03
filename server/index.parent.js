@@ -108,6 +108,36 @@ async function healthCheckCloudFrontUrl(signedUrl, unsignedUrl, maxRetries = 6) 
   console.warn(`[CLOUDFRONT] Health check failed after ${maxRetries} attempts. URL may not be cached yet: ${unsignedUrl}`);
 }
 
+/**
+ * Download image from S3 to local file
+ */
+async function downloadImageFromS3(s3Key, localPath) {
+  try {
+    const command = new GetObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: s3Key,
+    });
+    
+    const response = await s3.send(command);
+    
+    // Convert stream to buffer and write to file
+    const chunks = [];
+    for await (const chunk of response.Body) {
+      chunks.push(chunk);
+    }
+    const buffer = Buffer.concat(chunks);
+    
+    // Write buffer to file
+    fs.writeFileSync(localPath, buffer);
+    
+    console.log(`[CREATE_MEMORY] Downloaded ${s3Key} (${(buffer.length / 1024 / 1024).toFixed(2)} MB) to ${localPath}`);
+    return buffer.length;
+  } catch (error) {
+    console.error(`[CREATE_MEMORY] Failed to download ${s3Key} from S3:`, error.message);
+    throw error;
+  }
+}
+
 // Upload final video to S3 and generate signed URLs
 async function uploadFinalVideoToS3(rawPath, filename, musicTrack = null) {
   const key = `videos/published/${filename}`;
@@ -2054,19 +2084,17 @@ app.post('/api/upload-photos', upload.array('photos', MAX_PHOTOS), async (req, r
 });
 
 /**
- * Combined endpoint: plan + render
- * POST only - reject other methods with 405 Method Not Allowed
+ * Render-only endpoint: accepts photoKeys and order from Vercel
+ * Replaces the old OpenAI-based endpoint
  */
-app.all('/api/create-memory', (req, res, next) => {
-  if (req.method !== 'POST') {
-    return res.status(405).json({
-      error: `Method not allowed: ${req.method}. Only POST is allowed for /api/create-memory`
-    });
-  }
-  next();
-});
+import { createMemoryRenderOnly } from './createMemoryRenderOnly.js';
 
-app.post('/api/create-memory', async (req, res) => {
+app.options('/api/create-memory', createMemoryRenderOnly);
+app.post('/api/create-memory', createMemoryRenderOnly);
+
+// OLD ENDPOINT (kept for reference, no longer used - route is overridden above):
+// This endpoint code remains but is not reachable since the route is overridden above
+app.post('/api/create-memory-OLD', async (req, res) => {
   let currentStep = 'upload';
   
   // Initialize sessionId at the very top (before any usage)
