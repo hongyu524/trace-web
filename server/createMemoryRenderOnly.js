@@ -339,21 +339,27 @@ async function renderSlideshow({
 
   // Timing calculation: ensure balanced per-image durations
   // T = target film duration, N = number of images, X = crossfade duration
-  const crossfade = 0.35; // Crossfade duration in seconds
-  const targetDuration = Math.max(12, Math.min(18, frameCount * 1.7)); // Target 12-18s for reasonable clip counts
-  const hold = Math.max(0.9, Math.min(2.2, (targetDuration / frameCount) - crossfade));
-  const totalSeconds = Math.round(frameCount * hold + (frameCount - 1) * crossfade);
+  const N = frameCount;
+  const xfade = 0.35; // Crossfade duration in seconds
+  const targetDuration = Math.max(12, Math.min(30, N * 1.7)); // 9 images -> 15.3s
+  const hold = Math.max(0.9, (targetDuration - (N - 1) * xfade) / N);
+  const totalSeconds = Math.round(N * hold + (N - 1) * xfade);
+  
+  // Fail-loud check: prevent hold from being too long
+  if (hold > 3.0) {
+    throw new Error(`HOLD_TOO_LONG_BUG: hold=${hold.toFixed(2)} for N=${N} targetDuration=${targetDuration.toFixed(2)}`);
+  }
   
   // Sanity checks
   const timelineDiff = Math.abs(totalSeconds - targetDuration);
   if (timelineDiff > 0.5) {
     console.warn(`[PLAN] Timeline duration differs from target: totalSeconds=${totalSeconds} target=${targetDuration.toFixed(2)} diff=${timelineDiff.toFixed(2)}`);
   }
-  if (hold > 2.5) {
-    console.warn(`[PLAN] Hold duration exceeds safe limit: hold=${hold.toFixed(2)}`);
-  }
   
-  console.log(`[PLAN] N=${frameCount} T=${targetDuration.toFixed(2)} hold=${hold.toFixed(2)} xfade=${crossfade} totalSeconds=${totalSeconds}`);
+  console.log(`[PLAN] ========================================`);
+  console.log(`[PLAN] RENDER_PLAN`);
+  console.log(`[PLAN] N=${N} targetDurationSec=${targetDuration.toFixed(2)} holdSec=${hold.toFixed(2)} xfadeSec=${xfade} totalSeconds=${totalSeconds}`);
+  console.log(`[PLAN] imageCountUsed=${N} clipCount=${N}`);
 
   // We create an input pattern 0001.jpg, 0002.jpg...
   // Use -framerate to control image input rate; then enforce output fps
@@ -578,10 +584,40 @@ async function createMemoryRenderOnly(req, res) {
       finalOrder = Array.from({ length: usableImages.length }, (_, i) => i);
     }
 
-    // Apply order to usable images
+    // Apply order to usable images - ensure correct indexing
+    console.log(`[IMAGES] ========================================`);
+    console.log(`[IMAGES] ORDER_MAPPING`);
+    console.log(`[IMAGES] usableImages.length = ${usableImages.length}`);
+    console.log(`[IMAGES] finalOrder.length = ${finalOrder.length}`);
+    console.log(`[IMAGES] finalOrder.first5 = [${finalOrder.slice(0, 5).join(',')}]`);
+    console.log(`[IMAGES] finalOrder.last5 = [${finalOrder.slice(-5).join(',')}]`);
+    
+    // Validate finalOrder indices are within bounds
+    const invalidIndices = finalOrder.filter(idx => idx < 0 || idx >= usableImages.length);
+    if (invalidIndices.length > 0) {
+      console.error(`[IMAGES] ORDER_MAPPING_ERROR: invalid indices ${invalidIndices.join(', ')} for usableImages.length=${usableImages.length}`);
+      return jsonError(res, 400, 'INVALID_ORDER', `Order contains invalid indices: ${invalidIndices.slice(0, 5).join(', ')}`, {
+        ok: false,
+        error: 'INVALID_ORDER',
+        invalidIndices: invalidIndices,
+        usableImageCount: usableImages.length,
+      });
+    }
+    
+    // Ensure finalOrder length matches usableImages
+    if (finalOrder.length !== usableImages.length) {
+      console.error(`[IMAGES] ORDER_LENGTH_MISMATCH: finalOrder.length=${finalOrder.length} !== usableImages.length=${usableImages.length}`);
+      return jsonError(res, 400, 'ORDER_LENGTH_MISMATCH', `Order length ${finalOrder.length} does not match usable images ${usableImages.length}`, {
+        ok: false,
+        error: 'ORDER_LENGTH_MISMATCH',
+        orderLength: finalOrder.length,
+        usableImageCount: usableImages.length,
+      });
+    }
+    
     const orderedKeys = finalOrder.map((idx) => usableImages[idx]);
-
-    console.log(`[IMAGES] finalOrder=[${finalOrder.join(',')}]`);
+    console.log(`[IMAGES] orderedKeys.length = ${orderedKeys.length}`);
+    console.log(`[IMAGES] ========================================`);
 
     // fps is already normalized above, no need to validate again
 
@@ -608,7 +644,12 @@ async function createMemoryRenderOnly(req, res) {
 
     // Render silent video
     const silentMp4 = path.join(outDir, 'silent.mp4');
+    console.log(`[CREATE_MEMORY] ========================================`);
+    console.log(`[CREATE_MEMORY] RENDER_START`);
+    console.log(`[CREATE_MEMORY] orderedKeys.length = ${orderedKeys.length}`);
+    console.log(`[CREATE_MEMORY] framesDir = ${framesDir}`);
     console.log(`[CREATE_MEMORY] ffmpeg start -> ${silentMp4}`);
+    
     await renderSlideshow({
       framesDir,
       frameCount: orderedKeys.length,
@@ -623,6 +664,41 @@ async function createMemoryRenderOnly(req, res) {
     // Get video duration for fades and music muxing
     const videoDuration = await getVideoDuration(silentMp4);
     console.log(`[VIDEO] Silent video duration=${videoDuration.toFixed(2)}s`);
+    
+    // Validate output with ffprobe
+    console.log(`[CREATE_MEMORY] ========================================`);
+    console.log(`[CREATE_MEMORY] OUTPUT_VALIDATION_START`);
+    const N = orderedKeys.length;
+    const xfade = 0.35;
+    const targetDuration = Math.max(12, Math.min(30, N * 1.7));
+    const expectedMinDuration = targetDuration - 0.5;
+    
+    // Fail if duration is too short (especially for 9 images)
+    if (videoDuration < expectedMinDuration) {
+      console.error(`[CREATE_MEMORY] OUTPUT_VALIDATION_FAILED: videoDuration=${videoDuration.toFixed(2)}s < expectedMin=${expectedMinDuration.toFixed(2)}s for N=${N}`);
+      return jsonError(res, 500, 'OUTPUT_DURATION_TOO_SHORT', `Video duration ${videoDuration.toFixed(2)}s is too short for ${N} images (expected >= ${expectedMinDuration.toFixed(2)}s)`, {
+        ok: false,
+        error: 'OUTPUT_DURATION_TOO_SHORT',
+        videoDuration: videoDuration,
+        expectedMinDuration: expectedMinDuration,
+        imageCount: N,
+      });
+    }
+    
+    // Additional check: for 9 images, duration must be >= 10s
+    if (N >= 9 && videoDuration < 10) {
+      console.error(`[CREATE_MEMORY] OUTPUT_VALIDATION_FAILED: videoDuration=${videoDuration.toFixed(2)}s < 10s for N=${N}`);
+      return jsonError(res, 500, 'OUTPUT_DURATION_TOO_SHORT', `Video duration ${videoDuration.toFixed(2)}s is too short for ${N} images (must be >= 10s)`, {
+        ok: false,
+        error: 'OUTPUT_DURATION_TOO_SHORT',
+        videoDuration: videoDuration,
+        imageCount: N,
+      });
+    }
+    
+    console.log(`[CREATE_MEMORY] OUTPUT_VALIDATION_PASSED: duration=${videoDuration.toFixed(2)}s >= expectedMin=${expectedMinDuration.toFixed(2)}s`);
+    console.log(`[CREATE_MEMORY] RENDER_COMPLETE`);
+    console.log(`[CREATE_MEMORY] plan: imageCountUsed=${N} targetDurationSec=${targetDuration.toFixed(2)} holdSec=${((targetDuration - (N - 1) * xfade) / N).toFixed(2)} xfadeSec=${xfade}`);
 
     // Apply video fades to silent video first
     const videoWithFades = path.join(outDir, 'video_with_fades.mp4');
@@ -706,11 +782,45 @@ async function createMemoryRenderOnly(req, res) {
     if (imageCountUsed !== usableImages.length) {
       console.error(`[CREATE_MEMORY] IMAGE_COUNT_USED_MISMATCH: imageCountUsed=${imageCountUsed} usableImages=${usableImages.length}`);
       return jsonError(res, 500, 'IMAGE_COUNT_USED_MISMATCH', `Image count mismatch: used ${imageCountUsed}, usable ${usableImages.length}`, {
+        ok: false,
+        error: 'IMAGE_COUNT_USED_MISMATCH',
         imageCountUsed,
         usableImageCount: usableImages.length,
         requestedImageCount: photoKeys.length,
       });
     }
+    
+    // Calculate final render stats for response
+    const N = imageCountUsed;
+    const xfade = 0.35;
+    const targetDuration = Math.max(12, Math.min(30, N * 1.7));
+    const hold = Math.max(0.9, (targetDuration - (N - 1) * xfade) / N);
+    
+    // Get actual video duration if available (from final output)
+    let actualDuration = null;
+    try {
+      const finalMp4 = path.join(outDir, 'final_with_fades.mp4');
+      if (await fsp.access(finalMp4).then(() => true).catch(() => false)) {
+        actualDuration = await getVideoDuration(finalMp4);
+      } else {
+        // Fallback to silent video duration
+        actualDuration = videoDuration;
+      }
+    } catch (e) {
+      // Ignore if we can't get duration
+      actualDuration = videoDuration;
+    }
+
+    console.log(`[CREATE_MEMORY] ========================================`);
+    console.log(`[CREATE_MEMORY] RESPONSE_PREP`);
+    console.log(`[CREATE_MEMORY] requestedImageCount = ${photoKeys.length}`);
+    console.log(`[CREATE_MEMORY] usableImageCount = ${usableImages.length}`);
+    console.log(`[CREATE_MEMORY] imageCountUsed = ${imageCountUsed}`);
+    console.log(`[CREATE_MEMORY] targetDurationSec = ${targetDuration.toFixed(2)}`);
+    console.log(`[CREATE_MEMORY] holdSec = ${hold.toFixed(2)}`);
+    console.log(`[CREATE_MEMORY] xfadeSec = ${xfade}`);
+    console.log(`[CREATE_MEMORY] actualDurationSec = ${actualDuration ? actualDuration.toFixed(2) : 'null'}`);
+    console.log(`[CREATE_MEMORY] ========================================`);
 
     // Cleanup best-effort
     fsp.rm(baseDir, { recursive: true, force: true }).catch(() => {});
@@ -723,6 +833,10 @@ async function createMemoryRenderOnly(req, res) {
       requestedImageCount: photoKeys.length,
       usableImageCount: usableImages.length,
       imageCountUsed: imageCountUsed,
+      targetDurationSec: parseFloat(targetDuration.toFixed(2)),
+      holdSec: parseFloat(hold.toFixed(2)),
+      xfadeSec: xfade,
+      actualDurationSec: actualDuration ? parseFloat(actualDuration.toFixed(2)) : null,
       missingKeys: [],
       orderUsed: finalOrder,
       musicKeyUsed: musicKeyUsed,
