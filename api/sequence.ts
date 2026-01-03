@@ -14,6 +14,42 @@
 
 export const runtime = "nodejs";
 
+// Helper function to get headers from Node-style or Fetch-style request
+function getHeader(req: any, name: string): string | undefined {
+  const key = name.toLowerCase();
+
+  // Node/Vercel serverless: req.headers is an object
+  if (req?.headers && typeof req.headers === "object" && typeof (req.headers as any).get !== "function") {
+    const v = (req.headers as any)[key] ?? (req.headers as any)[name];
+    if (Array.isArray(v)) return v[0];
+    return typeof v === "string" ? v : undefined;
+  }
+
+  // Fetch/Edge style: req.headers.get exists
+  if (req?.headers && typeof (req.headers as any).get === "function") {
+    return (req.headers as any).get(name) ?? (req.headers as any).get(key) ?? undefined;
+  }
+
+  return undefined;
+}
+
+function setCors(req: any, res: any) {
+  const origin = getHeader(req, "origin") || "";
+  const allowlist = new Set([
+    "https://tracememory.store",
+    "https://www.tracememory.store",
+    "http://localhost:5173",
+    "http://localhost:3000",
+  ]);
+
+  const allowedOrigin = allowlist.has(origin) ? origin : "https://tracememory.store";
+
+  res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+}
+
 // Rate limiting: Simple in-memory store (for production, use Redis/Upstash)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
@@ -41,72 +77,57 @@ function checkRateLimit(ip: string | null): { allowed: boolean; remaining: numbe
   return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - record.count };
 }
 
-export default async function handler(req: Request): Promise<Response> {
+export default async function handler(req: any, res: any) {
+  setCors(req, res);
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+
   // Only allow POST
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   // Rate limiting
-  const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 
-                   req.headers.get('x-real-ip') || 
+  const clientIp = getHeader(req, 'x-forwarded-for')?.split(',')[0]?.trim() || 
+                   getHeader(req, 'x-real-ip') || 
                    null;
   const rateLimit = checkRateLimit(clientIp);
   
   if (!rateLimit.allowed) {
-    return new Response(JSON.stringify({ 
+    res.setHeader('X-RateLimit-Remaining', '0');
+    res.setHeader('Retry-After', '600');
+    return res.status(429).json({ 
       error: 'Rate limit exceeded', 
       message: 'Too many requests. Please try again later.' 
-    }), {
-      status: 429,
-      headers: { 
-        'Content-Type': 'application/json',
-        'X-RateLimit-Remaining': '0',
-        'Retry-After': '600'
-      }
     });
   }
 
   try {
     // Input validation
-    const body = await req.json();
+    const body = req.body || (typeof req.json === 'function' ? await req.json() : {});
     
     // Support both new format (photoKeys) and legacy format (images with base64/url)
     const photoKeys = body.photoKeys;
     const legacyImages = body.images;
     
     if (!photoKeys && !legacyImages) {
-      return new Response(JSON.stringify({ error: 'photoKeys array or images array required' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return res.status(400).json({ error: 'photoKeys array or images array required' });
     }
 
     const imageCount = photoKeys ? photoKeys.length : (legacyImages ? legacyImages.length : 0);
     
     if (imageCount === 0) {
-      return new Response(JSON.stringify({ error: 'At least one photo key or image is required' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return res.status(400).json({ error: 'At least one photo key or image is required' });
     }
 
     // Limit number of images
     if (imageCount > 36) {
-      return new Response(JSON.stringify({ error: 'Too many images (max 36)' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return res.status(400).json({ error: 'Too many images (max 36)' });
     }
 
     if (imageCount < 6) {
-      return new Response(JSON.stringify({ error: 'Too few images (min 6)' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return res.status(400).json({ error: 'Too few images (min 6)' });
     }
 
     // Validate API key
@@ -116,10 +137,7 @@ export default async function handler(req: Request): Promise<Response> {
     
     if (!apiKey) {
       console.error('[SEQUENCE] OPENAI_API_KEY is not set');
-      return new Response(JSON.stringify({ error: 'OPENAI_API_KEY is not set' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return res.status(500).json({ error: 'OPENAI_API_KEY is not set' });
     }
 
     const context = typeof body.context === 'string' ? body.context.trim() : '';
@@ -141,11 +159,8 @@ export default async function handler(req: Request): Promise<Response> {
       
       if (!awsAccessKeyId || !awsSecretAccessKey || !s3Bucket) {
         console.error('[SEQUENCE] Missing AWS credentials for S3 access');
-        return new Response(JSON.stringify({ 
+        return res.status(500).json({ 
           error: 'AWS credentials not configured. S3_BUCKET, AWS_ACCESS_KEY_ID, and AWS_SECRET_ACCESS_KEY must be set in Vercel environment variables.' 
-        }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' }
         });
       }
 
@@ -269,13 +284,10 @@ Return ONLY valid JSON with keys: order (array of indices), beats (optional arra
       
       if (!r.ok) {
         console.error('[SEQUENCE] OpenAI API error:', r.status, JSON.stringify(json).substring(0, 200));
-        return new Response(JSON.stringify({ 
+        return res.status(502).json({ 
           error: "OpenAI auth failed", 
           openaiStatus: r.status, 
           openaiBody: json 
-        }), {
-          status: 502,
-          headers: { 'Content-Type': 'application/json' }
         });
       }
 
@@ -291,21 +303,15 @@ Return ONLY valid JSON with keys: order (array of indices), beats (optional arra
       } catch (parseError) {
         console.error('[SEQUENCE] JSON parse error:', parseError);
         console.error('[SEQUENCE] Response text snippet:', text.substring(0, 500));
-        return new Response(JSON.stringify({ 
+        return res.status(500).json({ 
           error: 'Failed to parse OpenAI response as JSON',
           responseSnippet: text.substring(0, 500)
-        }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' }
         });
       }
 
       // Validate order array
       if (!Array.isArray(parsed.order)) {
-        return new Response(JSON.stringify({ error: 'Response missing valid "order" array' }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' }
-        });
+        return res.status(500).json({ error: 'Response missing valid "order" array' });
       }
 
       // Ensure order contains all indices exactly once
@@ -319,16 +325,11 @@ Return ONLY valid JSON with keys: order (array of indices), beats (optional arra
       }
 
       // Return response
-      return new Response(JSON.stringify({
+      res.setHeader('X-RateLimit-Remaining', rateLimit.remaining.toString());
+      return res.status(200).json({
         order: parsed.order,
         beats: Array.isArray(parsed.beats) ? parsed.beats : undefined,
         rationale: typeof parsed.rationale === 'string' ? parsed.rationale : undefined
-      }), {
-        status: 200,
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-RateLimit-Remaining': rateLimit.remaining.toString()
-        }
       });
 
     } catch (error: any) {
@@ -336,10 +337,7 @@ Return ONLY valid JSON with keys: order (array of indices), beats (optional arra
       
       if (error.name === 'AbortError') {
         console.error('[SEQUENCE] Request timed out');
-        return new Response(JSON.stringify({ error: 'Request timed out' }), {
-          status: 504,
-          headers: { 'Content-Type': 'application/json' }
-        });
+        return res.status(504).json({ error: 'Request timed out' });
       }
       
       console.error('[SEQUENCE] Error calling OpenAI:', error);
@@ -348,12 +346,9 @@ Return ONLY valid JSON with keys: order (array of indices), beats (optional arra
 
   } catch (error: any) {
     console.error('[SEQUENCE] Error:', error);
-    return new Response(JSON.stringify({ 
-      ok: false, 
-      error: error.message || 'Unknown error' 
-    }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
+    return res.status(500).json({ 
+      error: "sequence_failed",
+      detail: String(error?.message || error || 'Unknown error')
     });
   }
 }
