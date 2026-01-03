@@ -3518,6 +3518,7 @@ app.post('/api/media/presign-upload', async (req, res) => {
   }
 });
 console.log('Registered: POST /api/media/presign-upload');
+console.log('[ROUTES] Media routes mounted: /api/media/presign-upload, /api/media/signed-url, /api/media/playback-url');
 
 // CloudFront signed playback URL (production)
 app.get('/api/media/playback-url', (req, res) => {
