@@ -54,6 +54,8 @@ export type CreateMemoryResponse = {
   playbackUrl?: string;
   error?: string;
   detail?: string;
+  aspectRatioUsed?: string;
+  fpsUsed?: number;
 };
 
 export type SequenceImage = {

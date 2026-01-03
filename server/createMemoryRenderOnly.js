@@ -382,11 +382,16 @@ async function createMemoryRenderOnly(req, res) {
     const {
       photoKeys,
       order,
-      aspectRatio = '16:9',
-      frameRate = 24,
+      aspectRatio: rawAspectRatio,
+      fps: rawFps,
+      frameRate: rawFrameRate, // Accept both fps and frameRate for compatibility
       context = '',
       enableMusic = true,
     } = req.body || {};
+
+    console.log('[CREATE_MEMORY] received aspectRatio =', rawAspectRatio);
+    console.log('[CREATE_MEMORY] received fps =', rawFps);
+    console.log('[CREATE_MEMORY] received frameRate =', rawFrameRate);
 
     console.log('[IMAGES] receivedKeys=', Array.isArray(photoKeys) ? photoKeys.length : 'not-array');
     console.log('[IMAGES] first3Keys=', Array.isArray(photoKeys) ? photoKeys.slice(0, 3) : null);

@@ -137,6 +137,8 @@ export default function UploadFlow() {
       console.log('[CREATE_MEMORY] photoKeys.length =', photoKeys.length);
       console.log('[CREATE_MEMORY] first3 =', photoKeys.slice(0, 3));
       console.log('[CREATE_MEMORY] last3 =', photoKeys.slice(-3));
+      console.log('[CREATE_MEMORY] aspectRatio =', outputRatio);
+      console.log('[CREATE_MEMORY] fps =', fps);
       console.log(`[UploadFlow] Calling Railway: ${API_BASE}/api/create-memory`);
       try {
         const result = await createMemoryRender({
