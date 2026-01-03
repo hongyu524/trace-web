@@ -48,9 +48,24 @@ const app = express();
 // CRITICAL: Lightweight OPTIONS handler MUST be at the top, before any heavy imports
 // This handles CORS preflight requests instantly without loading FFmpeg, Sharp, etc.
 app.options('*', (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
+  // Echo requested headers for best compatibility
+  const reqHeaders = req.headers['access-control-request-headers'];
+  if (reqHeaders) {
+    res.setHeader('Access-Control-Allow-Headers', reqHeaders);
+  } else {
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  }
+  
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Max-Age', '3000');
   return res.status(204).end();
 });
 
