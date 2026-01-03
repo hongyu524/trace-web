@@ -229,25 +229,24 @@ async function uploadFinalVideoToS3(rawPath, filename, musicTrack = null) {
 
 // Middleware
 // CORS: Allow Vercel domain and development origins
-const allowedOrigins = [
+const allowlist = new Set([
   'https://tracememory.store',
   'https://www.tracememory.store',
-  ...(process.env.NODE_ENV === 'development' ? ['http://localhost:5173', 'http://localhost:3000'] : [])
-];
+  'http://localhost:5173',
+  'http://localhost:3000',
+]);
+
 app.use(cors({
-  origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, etc.)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // allow curl/postman
+    return allowlist.has(origin) ? cb(null, true) : cb(new Error('CORS blocked: ' + origin));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
 }));
+
+// MUST exist or preflight will 404 and the browser will block upload
+app.options('*', cors());
 app.use(express.json({ limit: '300mb' }));
 app.use(express.urlencoded({ extended: true, limit: '300mb' }));
 
