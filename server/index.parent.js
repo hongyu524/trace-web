@@ -2113,9 +2113,17 @@ app.post('/api/upload-photos', upload.array('photos', MAX_PHOTOS), async (req, r
 /**
  * Render-only endpoint: accepts photoKeys and order from Vercel
  * Replaces the old OpenAI-based endpoint
+ * Lazy-load createMemoryRenderOnly to avoid loading heavy modules (sharp, ffmpeg) at startup
  */
-app.options('/api/create-memory', createMemoryRenderOnly);
-app.post('/api/create-memory', createMemoryRenderOnly);
+app.options('/api/create-memory', async (req, res) => {
+  const { createMemoryRenderOnly } = await import('./createMemoryRenderOnly.js');
+  return createMemoryRenderOnly(req, res);
+});
+
+app.post('/api/create-memory', async (req, res) => {
+  const { createMemoryRenderOnly } = await import('./createMemoryRenderOnly.js');
+  return createMemoryRenderOnly(req, res);
+});
 
 // OLD ENDPOINT (kept for reference, no longer used - route is overridden above):
 // This endpoint code remains but is not reachable since the route is overridden above
