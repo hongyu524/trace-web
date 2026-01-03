@@ -23,6 +23,7 @@ import { signVideoPath } from './cloudfront-signer.js';
 import { finalizeForWeb, ffprobeInfo } from './utils/videoFinalize.js';
 import { inspectUploadedMp4 } from './utils/s3InspectMp4.js';
 import { signCloudFrontUrl, buildCloudFrontUrl } from './utils/cloudfrontSign.js';
+import { createMemoryRenderOnly } from './createMemoryRenderOnly.js';
 
 // Promisify exec for ESM-safe usage
 const exec = promisify(execCb);
@@ -2087,8 +2088,6 @@ app.post('/api/upload-photos', upload.array('photos', MAX_PHOTOS), async (req, r
  * Render-only endpoint: accepts photoKeys and order from Vercel
  * Replaces the old OpenAI-based endpoint
  */
-import { createMemoryRenderOnly } from './createMemoryRenderOnly.js';
-
 app.options('/api/create-memory', createMemoryRenderOnly);
 app.post('/api/create-memory', createMemoryRenderOnly);
 
