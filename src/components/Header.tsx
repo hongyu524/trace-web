@@ -5,15 +5,10 @@ interface HeaderProps {
 export default function Header({ onNavigate }: HeaderProps) {
 
   return (
-    <header className="w-full border-b border-gray-800 bg-gray-900/80 backdrop-blur-sm">
+    <header className="w-full border-b border-gray-900 bg-black/60 backdrop-blur-sm">
       <nav className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-        {/* Logo - Left */}
-        <div 
-          className="flex items-center cursor-pointer hover:opacity-80 transition-opacity" 
-          onClick={() => onNavigate?.('home')}
-        >
-          <span className="text-lg font-semibold text-white">TRACE</span>
-        </div>
+        {/* Empty left side for balance */}
+        <div className="w-24"></div>
 
         {/* Navigation Links - Center */}
         <div className="flex items-center space-x-8 absolute left-1/2 transform -translate-x-1/2">
