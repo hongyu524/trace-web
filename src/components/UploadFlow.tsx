@@ -78,7 +78,7 @@ export default function UploadFlow() {
         })
       );
 
-      // Step 1: Get optimal image ordering from OpenAI via Railway backend /api/sequence
+      // Step 1: Get optimal image ordering from OpenAI via Vercel /api/sequence
       setProgress({ percent: 10, step: "analyzing", detail: "Determining optimal image sequence..." });
       
       const sequenceImages: SequenceImage[] = imageData.map(img => ({
@@ -87,6 +87,7 @@ export default function UploadFlow() {
         mimeType: img.mimeType,
       }));
 
+      console.log('[UploadFlow] Calling Vercel: /api/sequence');
       let optimalOrder: number[];
       try {
         const sequenceResponse = await getImageSequence(
@@ -101,9 +102,11 @@ export default function UploadFlow() {
           console.log('[UploadFlow] Sequence rationale:', sequenceResponse.rationale);
         }
       } catch (seqError: any) {
-        console.warn('[UploadFlow] Sequence API failed, using original order:', seqError.message);
-        // Fallback to original order if sequence API fails
-        optimalOrder = Array.from({ length: files.length }, (_, i) => i);
+        console.error('[UploadFlow] Sequence API failed:', seqError.message);
+        setError(seqError.message || "Failed to analyze image sequence. Please try again.");
+        setLoading(false);
+        setProgress(null);
+        return; // Stop execution on sequence API failure
       }
 
       // Step 2: Reorder images based on optimal sequence
@@ -121,7 +124,9 @@ export default function UploadFlow() {
 
       // Use fetch with streaming response for SSE progress updates
       const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "http://localhost:8080" : "");
-      const response = await fetch(`${API_BASE}/api/create-memory?stream=true`, {
+      const railwayUrl = `${API_BASE}/api/create-memory`;
+      console.log(`[UploadFlow] Calling Railway: ${railwayUrl}`);
+      const response = await fetch(`${railwayUrl}?stream=true`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
