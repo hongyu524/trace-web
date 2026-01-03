@@ -325,6 +325,10 @@ async function createMemoryRenderOnly(req, res) {
       enableMusic = true,
     } = req.body || {};
 
+    console.log('[IMAGES] receivedKeys=', Array.isArray(photoKeys) ? photoKeys.length : 'not-array');
+    console.log('[IMAGES] first3Keys=', Array.isArray(photoKeys) ? photoKeys.slice(0, 3) : null);
+    console.log('[IMAGES] last3Keys=', Array.isArray(photoKeys) ? photoKeys.slice(-3) : null);
+
     // Validate photoKeys
     if (!Array.isArray(photoKeys) || photoKeys.length < 2) {
       return jsonError(res, 400, 'invalid_request', 'photoKeys must be an array with at least 2 items');
@@ -332,9 +336,6 @@ async function createMemoryRenderOnly(req, res) {
     if (!photoKeys.every(isNonEmptyString)) {
       return jsonError(res, 400, 'invalid_request', 'photoKeys must be an array of strings');
     }
-
-    console.log(`[IMAGES] receivedKeys=${photoKeys.length}`);
-    console.log(`[IMAGES] first3Keys=${photoKeys.slice(0, 3).join(',')}`);
 
     // Validate and download images
     const usableImages = [];
