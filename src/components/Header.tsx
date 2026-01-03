@@ -9,14 +9,9 @@ export default function Header({ onNavigate }: HeaderProps) {
       <nav className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
         {/* Logo - Left */}
         <div 
-          className="flex items-center space-x-2 cursor-pointer hover:opacity-80 transition-opacity" 
+          className="flex items-center cursor-pointer hover:opacity-80 transition-opacity" 
           onClick={() => onNavigate?.('home')}
         >
-          <div className="w-6 h-6 flex items-center justify-center">
-            <div className="w-5 h-5 border-2 border-cyan-400 border-t-0 border-b-0">
-              <div className="w-full h-full border-l-2 border-r-2 border-cyan-400"></div>
-            </div>
-          </div>
           <span className="text-lg font-semibold text-white">TRACE</span>
         </div>
 
