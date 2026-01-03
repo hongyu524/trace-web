@@ -3434,6 +3434,63 @@ app.get('/api/media/signed-url', async (req, res) => {
 });
 console.log('Registered: GET /api/media/signed-url');
 
+// Presigned PUT URL for photo uploads (client -> S3 direct upload)
+app.post('/api/media/presign-upload', async (req, res) => {
+  try {
+    const { fileName, contentType } = req.body;
+
+    if (!fileName || typeof fileName !== 'string') {
+      return res.status(400).json({ error: 'fileName is required' });
+    }
+
+    if (!contentType || typeof contentType !== 'string') {
+      return res.status(400).json({ error: 'contentType is required' });
+    }
+
+    // Validate content type is an image
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedTypes.includes(contentType.toLowerCase())) {
+      return res.status(400).json({ error: 'Invalid contentType. Must be an image type.' });
+    }
+
+    // Generate unique key: uploads/<timestamp>-<uuid>.<ext>
+    const timestamp = Date.now();
+    const uuid = crypto.randomUUID();
+    const ext = path.extname(fileName) || '.jpg';
+    const key = `uploads/${timestamp}-${uuid}${ext}`;
+
+    // Generate presigned PUT URL (expires in 5 minutes)
+    const putUrl = await getSignedUrl(
+      s3,
+      new PutObjectCommand({
+        Bucket: S3_BUCKET,
+        Key: key,
+        ContentType: contentType,
+        // Optional: Add metadata
+        Metadata: {
+          uploadedAt: new Date().toISOString(),
+          originalFileName: fileName,
+        },
+      }),
+      { expiresIn: 300 } // 5 minutes
+    );
+
+    console.log(`[PRESIGN_UPLOAD] Generated presigned PUT URL for key: ${key}`);
+
+    return res.json({
+      key,
+      putUrl,
+    });
+  } catch (err) {
+    console.error('[PRESIGN_UPLOAD] Error:', err);
+    return res.status(500).json({
+      error: 'Failed to generate presigned upload URL',
+      details: err?.message || 'Unknown error',
+    });
+  }
+});
+console.log('Registered: POST /api/media/presign-upload');
+
 // CloudFront signed playback URL (production)
 app.get('/api/media/playback-url', (req, res) => {
   try {

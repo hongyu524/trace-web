@@ -74,29 +74,35 @@ export default async function handler(req: Request): Promise<Response> {
     // Input validation
     const body = await req.json();
     
-    if (!body.images || !Array.isArray(body.images)) {
-      return new Response(JSON.stringify({ error: 'images array required' }), {
+    // Support both new format (photoKeys) and legacy format (images with base64/url)
+    const photoKeys = body.photoKeys;
+    const legacyImages = body.images;
+    
+    if (!photoKeys && !legacyImages) {
+      return new Response(JSON.stringify({ error: 'photoKeys array or images array required' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    if (body.images.length === 0) {
-      return new Response(JSON.stringify({ error: 'images array cannot be empty' }), {
+    const imageCount = photoKeys ? photoKeys.length : (legacyImages ? legacyImages.length : 0);
+    
+    if (imageCount === 0) {
+      return new Response(JSON.stringify({ error: 'At least one photo key or image is required' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
     // Limit number of images
-    if (body.images.length > 36) {
+    if (imageCount > 36) {
       return new Response(JSON.stringify({ error: 'Too many images (max 36)' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    if (body.images.length < 6) {
+    if (imageCount < 6) {
       return new Response(JSON.stringify({ error: 'Too few images (min 6)' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
@@ -121,22 +127,85 @@ export default async function handler(req: Request): Promise<Response> {
     const frameRate = typeof body.frameRate === 'number' ? body.frameRate : 24;
 
     // Build image content for OpenAI
-    const imageContents = body.images.map((img: any, idx: number) => {
-      let imageUrl: string;
-      if (img.url) {
-        imageUrl = img.url;
-      } else if (img.base64) {
-        const mimeType = img.mimeType || 'image/jpeg';
-        imageUrl = `data:${mimeType};base64,${img.base64}`;
-      } else {
-        throw new Error(`Image ${idx} (id: ${img.id}) must have either url or base64`);
-      }
+    let imageContents: Array<{ type: string; image_url: string }>;
+    
+    if (photoKeys) {
+      // New flow: Generate presigned GET URLs for S3 keys
+      console.log('[SEQUENCE] Using photoKeys mode, generating presigned GET URLs from S3');
       
-      return {
+      // Validate AWS credentials
+      const awsRegion = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-2';
+      const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
+      const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+      const s3Bucket = process.env.S3_BUCKET;
+      
+      if (!awsAccessKeyId || !awsSecretAccessKey || !s3Bucket) {
+        console.error('[SEQUENCE] Missing AWS credentials for S3 access');
+        return new Response(JSON.stringify({ 
+          error: 'AWS credentials not configured. S3_BUCKET, AWS_ACCESS_KEY_ID, and AWS_SECRET_ACCESS_KEY must be set in Vercel environment variables.' 
+        }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Import AWS SDK (dynamic import to avoid bundling issues)
+      const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
+      const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
+      
+      const s3 = new S3Client({
+        region: awsRegion,
+        credentials: {
+          accessKeyId: awsAccessKeyId,
+          secretAccessKey: awsSecretAccessKey,
+        },
+      });
+
+      // Generate presigned GET URLs for each photo key
+      const imageUrls = await Promise.all(
+        photoKeys.map(async (key: string, idx: number) => {
+          try {
+            const signedUrl = await getSignedUrl(
+              s3,
+              new GetObjectCommand({
+                Bucket: s3Bucket,
+                Key: key,
+              }),
+              { expiresIn: 3600 } // 1 hour
+            );
+            console.log(`[SEQUENCE] Generated presigned URL for key ${idx + 1}/${photoKeys.length}: ${key}`);
+            return signedUrl;
+          } catch (s3Error: any) {
+            console.error(`[SEQUENCE] Failed to generate presigned URL for key ${key}:`, s3Error.message);
+            throw new Error(`Failed to generate presigned URL for photo ${idx + 1}: ${s3Error.message}`);
+          }
+        })
+      );
+
+      imageContents = imageUrls.map((url: string) => ({
         type: 'input_image',
-        image_url: imageUrl
-      };
-    });
+        image_url: url
+      }));
+    } else {
+      // Legacy flow: Support base64/url images (for backward compatibility)
+      console.log('[SEQUENCE] Using legacy images mode (base64/url)');
+      imageContents = legacyImages.map((img: any, idx: number) => {
+        let imageUrl: string;
+        if (img.url) {
+          imageUrl = img.url;
+        } else if (img.base64) {
+          const mimeType = img.mimeType || 'image/jpeg';
+          imageUrl = `data:${mimeType};base64,${img.base64}`;
+        } else {
+          throw new Error(`Image ${idx} (id: ${img.id}) must have either url or base64`);
+        }
+        
+        return {
+          type: 'input_image',
+          image_url: imageUrl
+        };
+      });
+    }
 
     // Build prompt
     const systemPrompt = `You are a professional photo editor and film story editor. Your job is to analyze a set of images and produce the best cinematic ordering for a memory video.
@@ -158,7 +227,7 @@ RULES:
 Aspect Ratio: ${aspectRatio}
 Frame Rate: ${frameRate} fps
 
-Analyze these ${body.images.length} images and determine the optimal cinematic ordering.
+Analyze these ${imageCount} images and determine the optimal cinematic ordering.
 Return ONLY valid JSON with keys: order (array of indices), beats (optional array), rationale (optional string).`;
 
     // Call OpenAI Responses API
@@ -240,9 +309,9 @@ Return ONLY valid JSON with keys: order (array of indices), beats (optional arra
       }
 
       // Ensure order contains all indices exactly once
-      const expectedIndices = Array.from({ length: body.images.length }, (_, i) => i);
+      const expectedIndices = Array.from({ length: imageCount }, (_, i) => i);
       const orderSet = new Set(parsed.order);
-      const hasAllIndices = expectedIndices.every(i => orderSet.has(i)) && parsed.order.length === body.images.length;
+      const hasAllIndices = expectedIndices.every(i => orderSet.has(i)) && parsed.order.length === imageCount;
       
       if (!hasAllIndices) {
         console.warn('[SEQUENCE] Order validation failed, using fallback');
