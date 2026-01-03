@@ -8,30 +8,33 @@ export default function Header({ onNavigate }: HeaderProps) {
   const [showResources, setShowResources] = useState(false);
 
   return (
-    <header className="w-full border-b border-gray-800 bg-black/50 backdrop-blur-sm">
+    <header className="w-full border-b border-gray-800 bg-gray-900/80 backdrop-blur-sm">
       <nav className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-        {/* Logo */}
-        <div className="flex items-center space-x-3 cursor-pointer" onClick={() => onNavigate?.('home')}>
-          <div className="w-8 h-8 flex items-center justify-center">
-            <div className="w-6 h-6 border-2 border-cyan-400 border-t-0 border-b-0">
+        {/* Logo - Left */}
+        <div 
+          className="flex items-center space-x-2 cursor-pointer hover:opacity-80 transition-opacity" 
+          onClick={() => onNavigate?.('home')}
+        >
+          <div className="w-6 h-6 flex items-center justify-center">
+            <div className="w-5 h-5 border-2 border-cyan-400 border-t-0 border-b-0">
               <div className="w-full h-full border-l-2 border-r-2 border-cyan-400"></div>
             </div>
           </div>
-          <span className="text-xl font-semibold text-cyan-400">TRACE</span>
+          <span className="text-lg font-semibold text-white">TRACE</span>
         </div>
 
-        {/* Navigation Links */}
-        <div className="flex items-center space-x-8">
+        {/* Navigation Links - Center */}
+        <div className="flex items-center space-x-8 absolute left-1/2 transform -translate-x-1/2">
           <button
             onClick={() => onNavigate?.('community')}
-            className="text-gray-400 hover:text-white transition-colors text-sm"
+            className="text-white hover:text-cyan-400 transition-colors text-sm font-medium"
           >
             Community
           </button>
           
           <button
             onClick={() => onNavigate?.('enterprise')}
-            className="text-gray-400 hover:text-white transition-colors text-sm"
+            className="text-white hover:text-cyan-400 transition-colors text-sm font-medium"
           >
             Enterprise
           </button>
@@ -39,10 +42,10 @@ export default function Header({ onNavigate }: HeaderProps) {
           <div className="relative">
             <button
               onClick={() => setShowResources(!showResources)}
-              className="text-gray-400 hover:text-white transition-colors text-sm flex items-center space-x-1"
+              className="text-white hover:text-cyan-400 transition-colors text-sm font-medium flex items-center space-x-1"
             >
               <span>Resources</span>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </button>
@@ -61,13 +64,15 @@ export default function Header({ onNavigate }: HeaderProps) {
           
           <button
             onClick={() => onNavigate?.('pricing')}
-            className="text-gray-400 hover:text-white transition-colors text-sm"
+            className="text-white hover:text-cyan-400 transition-colors text-sm font-medium"
           >
             Pricing
           </button>
         </div>
+
+        {/* Right side - empty for now, can add social icons later */}
+        <div className="w-24"></div>
       </nav>
     </header>
   );
 }
-
