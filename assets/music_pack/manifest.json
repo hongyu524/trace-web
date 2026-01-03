@@ -1,4 +1,6 @@
 {
+  "version": 2,
+  "updatedAt": "2026-01-03T05:08:02.794405+00:00",
   "tracks": [
     {
       "id": "acoustic_guitar_emotional_nostalgia",
@@ -15,7 +17,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/ACOUSTIC-GUITAR-EMOTIONAL-NOSTALGIA.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "affection_full_length",
@@ -32,7 +39,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Affection_full-length.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "beo_for_the_rest_of_my_life",
@@ -49,7 +61,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Beò - For the Rest of My Life.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "captain_joz_-_gaga",
@@ -65,7 +82,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Captain Joz - Gaga.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "daniel_catala_elevare",
@@ -82,7 +104,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Daniel Catalá - Elevare.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "david_gonzalez_-_dear_josh",
@@ -98,7 +125,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/David Gonzalez - Dear Josh.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "dodo_danciu_scarlett",
@@ -115,7 +147,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Dodo Danciu - Scarlett.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "efgr_-_destiny",
@@ -131,7 +168,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/EFGR - Destiny.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "efgr_-_forever_free",
@@ -147,7 +189,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/EFGR - Forever Free.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "efgr_-_home",
@@ -163,7 +210,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/EFGR - Home.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "efgr_-_parallax",
@@ -179,7 +231,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/EFGR - Parallax.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "efgr_-_the_meadows",
@@ -195,7 +252,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/EFGR - The Meadows.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "evoe_-_sola",
@@ -211,7 +273,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/EVOE - Sola.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "flint_-_sunmonth",
@@ -227,7 +294,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Flint - Sunmonth.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "flint_-_take_my_time_-_instrumental_version",
@@ -243,7 +315,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Flint - Take My Time - Instrumental version.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "flint_take_my_time",
@@ -260,7 +337,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Flint - Take My Time.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "funky_giraffe_-_are_you_ready_for_me_baby_-_no_lead_vocals",
@@ -276,7 +358,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Funky Giraffe - Are You Ready for Me Baby - No Lead Vocals.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "funky_giraffe_are_you_ready_for_me_baby",
@@ -293,7 +380,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Funky Giraffe - Are You Ready for Me Baby.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "inspirations_cinematic_felt_piano",
@@ -310,7 +402,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Inspirations-Cinematic-Felt-Piano.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "itay_kashti_-_endless_hope",
@@ -326,7 +423,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Itay Kashti - Endless Hope.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "jeremy_chontow_into_the_deep",
@@ -343,7 +445,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Jeremy Chontow - Into the Deep.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "just_for_kicks_-_just_candy",
@@ -359,7 +466,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Just for Kicks - Just Candy.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "louis_island_-_the_coffee_song",
@@ -375,7 +487,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Louis Island - The Coffee Song.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "nature",
@@ -392,7 +509,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Nature.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "prins_-_something_new",
@@ -408,7 +530,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/PRINS - Something New.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "proposal",
@@ -425,7 +552,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/PROPOSA.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "piotr_hummel_-_heroes",
@@ -441,7 +573,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Piotr Hummel - Heroes.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "roie_shpigler_clarity",
@@ -458,7 +595,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Roie Shpigler - Clarity.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "roie_shpigler_-_featherlight",
@@ -474,7 +616,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Roie Shpigler - Featherlight.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "romeo_eagle_flight",
@@ -491,7 +638,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Romeo - Eagle Flight.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "romeo_-_fractal",
@@ -507,7 +659,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Romeo - Fractal.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "romeo_rivulet",
@@ -524,7 +681,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Romeo - Rivulet.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "rotem_moav_-_ornithopia",
@@ -540,7 +702,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Rotem Moav - Ornithopia.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "semo_-_earth_heavens",
@@ -556,7 +723,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Semo - Earth  Heavens.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "semo_-_fireflies",
@@ -572,7 +744,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Semo - Fireflies.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "sharabina_-_janne_na",
@@ -588,7 +765,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Sharabina - Janne Na.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "shinto_-_sun_love_-_no_whistle",
@@ -604,7 +786,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Shinto - Sun Love - No Whistle.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "skygaze_-_kissing_the_moon",
@@ -620,7 +807,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Skygaze - Kissing the Moon.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "tillander_-_brighter_-_instrumental_version",
@@ -636,7 +828,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/TILLANDER - Brighter - Instrumental version.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "tillander_-_never_dont_try_-_instrumental_version",
@@ -652,7 +849,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/TILLANDER - Never Dont Try - Instrumental version.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "turpak_-_synergy",
@@ -668,7 +870,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/TURPAK - Synergy.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "thomas_ben_tov_-_echoes_of_the_forest_-_creative_cut_-_reverbed",
@@ -684,7 +891,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Thomas Ben Tov - Echoes of the Forest - Creative Cut - Reverbed.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "tristan_barton_mind_heart",
@@ -701,7 +913,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Tristan Barton - Mind  Heart.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "yehezkel_raz_-_as_long_as_in_the_heart_-_creative_cut_-_dreamy",
@@ -717,7 +934,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/Yehezkel Raz - As Long as in the Heart - Creative Cut - Dreamy.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "golden_waves",
@@ -734,7 +956,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/golden-waves.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "idokay_chronos",
@@ -751,7 +978,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/idokay - Chronos.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     },
     {
       "id": "idokay_-_kairos_-_creative_cut_-_dreamy",
@@ -767,7 +999,12 @@
       "outro": "resolving",
       "attributionRequired": false,
       "source": "local",
-      "recommendedStartSec": 0
+      "recommendedStartSec": 0,
+      "key": "music/idokay - Kairos - Creative Cut - Dreamy.mp3",
+      "durationSec": null,
+      "bpm": null,
+      "sections": null,
+      "beatTimes": null
     }
   ]
 }
