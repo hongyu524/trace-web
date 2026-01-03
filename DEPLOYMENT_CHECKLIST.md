@@ -161,3 +161,5 @@ Expected response:
 - Railway backend (`server/`) - Unchanged, still handles video rendering
 - No OpenAI calls in client bundle (`src/`)
 
+
+Deployment refresh
