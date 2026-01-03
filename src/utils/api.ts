@@ -324,9 +324,23 @@ export async function getImageSequence(
   return data;
 }
 
+function normalizeVideoPath(p: string): string {
+  if (!p) return p;
+  // Ensure leading slash
+  if (!p.startsWith("/")) p = "/" + p;
+  // Ensure it starts with /videos/
+  if (!p.startsWith("/videos/")) {
+    // If caller passed "videos/...", this fixes it
+    if (p.startsWith("/videos")) return p;
+    // Otherwise do not guess; let backend reject with a clearer error
+  }
+  return p;
+}
+
 export async function fetchSignedVideoPayload(path: string, prefer?: string): Promise<SignedUrlPayload> {
   console.log('[API] Calling Railway backend for signed URL:', `${API_BASE}/api/media/signed-url`);
-  const params = new URLSearchParams({ path });
+  const fixedPath = normalizeVideoPath(path);
+  const params = new URLSearchParams({ path: fixedPath });
   if (prefer) params.set('prefer', prefer);
   const resp = await fetch(`${API_BASE}/api/media/signed-url?${params.toString()}`);
   if (!resp.ok) {
