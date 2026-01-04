@@ -197,7 +197,9 @@ function getDocumentaryTransformAt(t, preset, params) {
       const motionPack = params.motionPack || 'documentary';
       if (motionPack === 'documentary') {
         const panPercent = rng.nextFloat(-1.5, 1.5); // Small pan during push
-        translateX = (params.frameWidth * panPercent * t) / 100;
+        // Use eased curve for more natural movement
+        const easedPan = easeInOutSine(t);
+        translateX = (params.frameWidth * panPercent * easedPan) / 100;
         translateY = 0;
       } else {
         translateX = 0;
@@ -219,11 +221,16 @@ function getDocumentaryTransformAt(t, preset, params) {
     case 'LATERAL_DRIFT_L': {
       // Fixed scale: slightly zoomed to avoid edge reveal (min 1.02 for drift safety)
       scale = rng.nextFloat(Math.max(1.02, cfg.minScale), cfg.maxScale);
-      // translateX: negative drift (left), 0.8% to 2.0% of frame width
+      // translateX: negative drift (left), 0.8% to maxDriftPercent% of frame width
       const driftPercent = rng.nextFloat(cfg.minDriftPercent, cfg.maxDriftPercent);
       let driftPx = (params.frameWidth * driftPercent) / 100;
-      // Linear movement from 0 to -driftPx
-      driftPx = -driftPx * t;
+      // Documentary: use eased movement (easeInOutSine) instead of linear for more natural feel
+      const eased = easeInOutSine(t);
+      driftPx = -driftPx * eased;
+      // Add very subtle noise for documentary (≤0.2% frame) to avoid perfect robot pan
+      const noiseAmplitude = params.frameWidth * 0.002; // 0.2% of frame width
+      const noise = rng.nextFloat(-noiseAmplitude, noiseAmplitude) * (1 - Math.abs(t - 0.5) * 2); // More noise in middle, less at edges
+      driftPx = driftPx + noise;
       // Clamp drift to prevent black edge reveal (pass motionPack if available)
       const motionPack = params.motionPack || 'documentary'; // Default to documentary for documentary pack
       translateX = clampDriftForScale(driftPx, params.frameWidth, scale, motionPack);
@@ -237,8 +244,13 @@ function getDocumentaryTransformAt(t, preset, params) {
       // translateX: positive drift (right), 0.8% to maxDriftPercent% of frame width
       const driftPercent = rng.nextFloat(cfg.minDriftPercent, cfg.maxDriftPercent);
       let driftPx = (params.frameWidth * driftPercent) / 100;
-      // Linear movement from 0 to +driftPx
-      driftPx = driftPx * t;
+      // Documentary: use eased movement (easeInOutSine) instead of linear for more natural feel
+      const eased = easeInOutSine(t);
+      driftPx = driftPx * eased;
+      // Add very subtle noise for documentary (≤0.2% frame) to avoid perfect robot pan
+      const noiseAmplitude = params.frameWidth * 0.002; // 0.2% of frame width
+      const noise = rng.nextFloat(-noiseAmplitude, noiseAmplitude) * (1 - Math.abs(t - 0.5) * 2); // More noise in middle, less at edges
+      driftPx = driftPx + noise;
       // Clamp drift to prevent black edge reveal (pass motionPack if available)
       const motionPack = params.motionPack || 'documentary'; // Default to documentary for documentary pack
       translateX = clampDriftForScale(driftPx, params.frameWidth, scale, motionPack);
