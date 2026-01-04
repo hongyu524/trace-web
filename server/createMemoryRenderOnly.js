@@ -1017,46 +1017,66 @@ async function renderSlideshow({
   // Log per-segment timing for verification
   console.log(`[PLAN] clipDur=${clipDur.toFixed(3)}s segmentFrames=${segmentFrames} xfadeFrames=${xfadeFrames} hold=${hold.toFixed(3)}s xfade=${xf.toFixed(3)}s`);
   
-  // Process each input image: apply Documentary Gimbal Move via zoompan at 4K, then downscale
+  // Process each input image: apply motion or static crop
+  const isStaticMode = motionPack === 'none' || motionPack === 'static';
+  
   for (let i = 0; i < N; i++) {
     const motion = motions[i];
     
-    // Scale source to base size (larger than render resolution to allow zoom)
-    // Use render dimensions * maxZoom to ensure we have headroom
-    const maxZoom = Math.max(motion.startZoom, motion.endZoom, 1.055);
-    const baseWidth = Math.round(renderWidth * maxZoom);
-    const baseHeight = Math.round(renderHeight * maxZoom);
-    
-    // Build zoompan expression using Documentary Gimbal Move plan (render at 4K)
-    const zoompanExpr = buildZoompanExpr({
-      startZoom: motion.startZoom,
-      endZoom: motion.endZoom,
-      focalX: motion.focalX,
-      focalY: motion.focalY,
-      panOffsetX: motion.panOffsetX,
-      panOffsetY: motion.panOffsetY,
-      holdSeconds: motion.holdSeconds,
-      frames: segmentFrames,
-      fps: fps,
-      W: renderWidth,
-      H: renderHeight,
-    });
-    
-    // Log segment motion (sample a few)
-    if (i < 3 || i >= N - 1) {
-      console.log(`[DOC_GIMBAL] seg#${i} type=${motion.type} zoom ${motion.startZoom.toFixed(3)}→${motion.endZoom.toFixed(3)} focal=(${motion.focalX.toFixed(2)},${motion.focalY.toFixed(2)}) pan=(${motion.panOffsetX.toFixed(3)},${motion.panOffsetY.toFixed(3)}) hold=${motion.holdSeconds}s duration=${clipDur.toFixed(2)}s`);
+    if (isStaticMode || (motion.type === 'STATIC' && motion.startZoom === 1.0 && motion.endZoom === 1.0)) {
+      // Static mode: no motion, just scale/crop to output size, loop for duration, set fps
+      // Use loop filter to create static frames for the segment duration
+      filterParts.push(
+        `[${i}:v]scale=${outputWidth}:${outputHeight}:force_original_aspect_ratio=decrease,` +
+        `pad=${outputWidth}:${outputHeight}:(ow-iw)/2:(oh-ih)/2,` +
+        `loop=loop=${segmentFrames}:size=1:start=0,` +
+        `setpts=PTS-STARTPTS,` +
+        `fps=${fps},` +
+        `format=yuv420p[img${i}]`
+      );
+      
+      if (i < 3 || i >= N - 1) {
+        console.log(`[STATIC] seg#${i} no motion - static image duration=${clipDur.toFixed(2)}s frames=${segmentFrames}`);
+      }
+    } else {
+      // Motion mode: apply Documentary Gimbal Move via zoompan at 4K, then downscale
+      // Scale source to base size (larger than render resolution to allow zoom)
+      // Use render dimensions * maxZoom to ensure we have headroom
+      const maxZoom = Math.max(motion.startZoom, motion.endZoom, 1.055);
+      const baseWidth = Math.round(renderWidth * maxZoom);
+      const baseHeight = Math.round(renderHeight * maxZoom);
+      
+      // Build zoompan expression using Documentary Gimbal Move plan (render at 4K)
+      const zoompanExpr = buildZoompanExpr({
+        startZoom: motion.startZoom,
+        endZoom: motion.endZoom,
+        focalX: motion.focalX,
+        focalY: motion.focalY,
+        panOffsetX: motion.panOffsetX,
+        panOffsetY: motion.panOffsetY,
+        holdSeconds: motion.holdSeconds,
+        frames: segmentFrames,
+        fps: fps,
+        W: renderWidth,
+        H: renderHeight,
+      });
+      
+      // Log segment motion (sample a few)
+      if (i < 3 || i >= N - 1) {
+        console.log(`[DOC_GIMBAL] seg#${i} type=${motion.type} zoom ${motion.startZoom.toFixed(3)}→${motion.endZoom.toFixed(3)} focal=(${motion.focalX.toFixed(2)},${motion.focalY.toFixed(2)}) pan=(${motion.panOffsetX.toFixed(3)},${motion.panOffsetY.toFixed(3)}) hold=${motion.holdSeconds}s duration=${clipDur.toFixed(2)}s`);
+      }
+      
+      // Process image: scale to base, apply zoompan motion at 4K (no rotation), downscale to output with lanczos, set fps and format
+      // Note: zoompan outputs exactly 'd' frames, so we don't need loop/trim
+      // Use lanczos downscaling to eliminate integer stepping/jitter
+      filterParts.push(
+        `[${i}:v]scale=${baseWidth}:${baseHeight}:force_original_aspect_ratio=increase,` +
+        `${zoompanExpr},` +
+        `scale=${outputWidth}:${outputHeight}:flags=lanczos,` +
+        `fps=${fps},` +
+        `format=yuv420p[img${i}]`
+      );
     }
-    
-    // Process image: scale to base, apply zoompan motion at 4K (no rotation), downscale to output with lanczos, set fps and format
-    // Note: zoompan outputs exactly 'd' frames, so we don't need loop/trim
-    // Use lanczos downscaling to eliminate integer stepping/jitter
-    filterParts.push(
-      `[${i}:v]scale=${baseWidth}:${baseHeight}:force_original_aspect_ratio=increase,` +
-      `${zoompanExpr},` +
-      `scale=${outputWidth}:${outputHeight}:flags=lanczos,` +
-      `fps=${fps},` +
-      `format=yuv420p[img${i}]`
-    );
   }
   
   // Chain xfade transitions with cumulative offsets
