@@ -432,21 +432,22 @@ export function getDocumentaryTransformAt(
         actualDriftPx = desiredDriftPx;
       }
       
-      // Use docProgress for continuous motion from frame 1 (no hold/pause)
-      const eased = docProgress(t);
+      // Use docProgress with time remap for continuous motion from frame 1 (non-zero initial velocity)
+      // Same progress for BOTH scale and translation (no linear drift)
+      const progress = docProgress(t);
       
-      // Scale ramps with same eased progress: scale(t) = 1 + (endScale - 1)*docProgress(t)
+      // Scale ramps with progress: scale(t) = 1 + (endScale - 1)*progress
       // Start at scale 1.0, ramp to endScale
-      scale = 1.0 + (endScale - 1.0) * eased;
+      scale = 1.0 + (endScale - 1.0) * progress;
       
-      // Translate uses same eased progress, constrained by overscan rule
+      // Translate uses same progress, constrained by overscan rule
       // overscanPerSidePx = ((scale - 1) * frameWidth) / 2
       // abs(translateX) <= overscanPerSidePx - safetyPx
       const currentOverscanPerSide = ((scale - 1) * params.frameWidth) / 2;
       const maxTranslateAtCurrentScale = Math.max(0, currentOverscanPerSide - safetyMarginPx);
       
-      // Apply drift with eased progress, clamped to current scale's overscan limit
-      const rawTranslateX = isLeft ? -actualDriftPx * eased : actualDriftPx * eased;
+      // Apply drift with progress, clamped to current scale's overscan limit
+      const rawTranslateX = isLeft ? -actualDriftPx * progress : actualDriftPx * progress;
       translateX = clamp(rawTranslateX, -maxTranslateAtCurrentScale, maxTranslateAtCurrentScale);
       translateY = 0;
       break;
