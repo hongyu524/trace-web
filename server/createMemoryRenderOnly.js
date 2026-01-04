@@ -256,7 +256,10 @@ async function ffprobeHasAudio(filePath) {
       '-show_entries', 'stream=codec_type',
       '-of', 'json',
       filePath,
-    ]);
+    ], {
+      timeout: 30000, // 30 seconds
+      stage: 'ffprobe_has_audio'
+    });
     const parsed = JSON.parse(stdout);
     const audioStreams = parsed.streams?.filter((s) => s.codec_type === 'audio') || [];
     return audioStreams.length > 0;
@@ -379,7 +382,10 @@ async function getVideoDuration(videoPath) {
       '-show_entries', 'format=duration',
       '-of', 'default=noprint_wrappers=1:nokey=1',
       videoPath,
-    ]);
+    ], {
+      timeout: 30000, // 30 seconds
+      stage: 'ffprobe_duration'
+    });
     return parseFloat(stdout) || 0;
   } catch (err) {
     console.warn('[VIDEO] Could not determine duration:', err.message);
@@ -524,7 +530,10 @@ async function appendEndCap(inputMp4Path, outputMp4Path) {
     '-show_entries', 'stream=width,height',
     '-of', 'json',
     inputMp4Path,
-  ]);
+  ], {
+    timeout: 30000, // 30 seconds for probe
+    stage: 'endcap_probe'
+  });
   const probeData = JSON.parse(probeStdout);
   const width = probeData.streams?.[0]?.width || 1920;
   const height = probeData.streams?.[0]?.height || 1080;
@@ -589,7 +598,11 @@ async function appendEndCap(inputMp4Path, outputMp4Path) {
   console.log('[ENDCAP] Output path:', outputMp4Path);
   
   try {
-    await run(ffmpeg, args, { env: process.env });
+    await run(ffmpeg, args, { 
+      env: process.env,
+      timeout: 180000, // 3 minutes max for end cap
+      stage: 'append_endcap'
+    });
     
     // Log success and verify output duration
     const outputDuration = await ffprobeDurationSeconds(outputMp4Path);
@@ -876,7 +889,11 @@ async function renderSlideshow({
   console.log(`[PLAN] FFmpeg inputCount=${N} offsets=[${offsets.map(o => o.toFixed(2)).join(',')}]`);
   console.log(`[PLAN] FFmpeg filtergraph length=${filtergraph.length} chars`);
 
-  return run(ffmpeg, args, { env: process.env });
+  return run(ffmpeg, args, { 
+    env: process.env,
+    timeout: 300000, // 5 minutes for video rendering
+    stage: 'render_slideshow'
+  });
 }
 
 function normalizeAspectRatio(input) {
