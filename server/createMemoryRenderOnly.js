@@ -588,8 +588,8 @@ async function createMemoryRenderOnly(req, res) {
     
     console.log('[CREATE_MEMORY] normalized aspectRatio =', aspectRatio);
     console.log('[CREATE_MEMORY] normalized fps =', fps);
-    console.log('[CREATE_MEMORY] motionPack =', req.body.motionPack);
-    console.log('[CREATE_MEMORY] motionPack (normalized) =', motionPack);
+    console.log('[CREATE_MEMORY] motionPack =', req.body?.motionPack);
+    console.log('[CREATE_MEMORY] motionPack (final) =', finalMotionPack);
     console.log('[CREATE_MEMORY] autoReframe =', autoReframe);
 
     // Validate photoKeys
