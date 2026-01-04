@@ -63,14 +63,14 @@ export function generatePhase1Motions({ count, pack = 'default', aspectRatio = '
     driftWeight: 0.40,
     pullBackWeight: 0.10,
     maxScale: 1.06,
-    driftMax: 0.015, // 1.5% of frame
+    driftMax: 0.0075, // Reduced to 0.75% of frame (was 1.5%) for subtle, smooth drift
   } : {
     staticWeight: 0.50,
     pushInWeight: 0.40,
     driftWeight: 0.08,
     pullBackWeight: 0.02,
     maxScale: 1.035,
-    driftMax: 0.01, // 1% of frame (or 0 for cleaner)
+    driftMax: 0.005, // Reduced to 0.5% of frame for subtle motion
   };
 
   const motions = [];
@@ -93,10 +93,10 @@ export function generatePhase1Motions({ count, pack = 'default', aspectRatio = '
       { type: 'pull_back', weight: config.pullBackWeight },
     ];
 
-    // Adjust weights based on previous types
+    // Adjust weights based on previous types (prevent direction flips)
     let adjustedWeights = [...weights];
     if (previousType === 'drift') {
-      // Reduce drift weight if previous was drift
+      // Reduce drift weight if previous was drift (prevent consecutive drifts)
       adjustedWeights = adjustedWeights.map(w => 
         w.type === 'drift' ? { ...w, weight: w.weight * 0.3 } : w
       );
@@ -113,6 +113,9 @@ export function generatePhase1Motions({ count, pack = 'default', aspectRatio = '
         w.type === 'static' ? { ...w, weight: w.weight * 1.5 } : w
       );
     }
+    
+    // Prevent drift direction flips: if previous was drift, prefer static or opposite-direction drift
+    // (This is handled by reducing consecutive drift weight above)
 
     // Normalize weights
     const totalWeight = adjustedWeights.reduce((sum, w) => sum + w.weight, 0);

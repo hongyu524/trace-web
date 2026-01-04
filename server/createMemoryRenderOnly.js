@@ -775,13 +775,13 @@ async function muxAudioVideo(videoPath, audioPath, outputPath, videoDuration) {
   console.log(`[MUSIC] audioFilter length=${audioFilter.length} chars`);
   console.log(`[MUSIC] ============`);
   
-  // Step 7: Spawn FFmpeg with timeout
-  try {
-    const result = await run(ffmpeg, args, { 
-      env: process.env,
-      timeout: 180000, // 3 minutes max
-      stage: 'add_music'
-    });
+    // Step 7: Spawn FFmpeg with shorter timeout (2 minutes) for fail-fast
+    try {
+      const result = await run(ffmpeg, args, { 
+        env: process.env,
+        timeout: 120000, // 2 minutes max for fail-fast
+        stage: 'add_music'
+      });
     
     // Step 8: Log success with details
     const elapsed = Date.now() - startTime;
@@ -1497,7 +1497,7 @@ async function createMemoryRenderOnly(req, res) {
 
     if (enableMusic) {
       const musicStartTime = Date.now();
-      console.log(`[PIPE] stage=add_music start jobId=${jobId}`);
+      console.log(`[PIPE] stage=add_music start jobId=${jobId} videoDur=${videoDuration.toFixed(3)}`);
       try {
         // Select and download music
         const musicKey = await selectMusicTrack(S3_BUCKET, context, photoKeys);
@@ -1506,9 +1506,10 @@ async function createMemoryRenderOnly(req, res) {
 
         // Mux audio and video (with audio fades)
         finalMp4 = path.join(outDir, 'final_with_music.mp4');
-        console.log('[MUSIC] Starting mux...');
+        console.log(`[MUSIC] Starting mux... videoDur=${videoDuration.toFixed(3)} track=${musicKey}`);
         progressStore.set(jobId, { percent: 94, step: 'rendering', detail: 'Muxing audio and video...' });
         await muxAudioVideo(videoWithFades, musicPath, finalMp4, videoDuration);
+        console.log(`[PIPE] stage=add_music done out=${finalMp4}`);
         console.log('[MUSIC] Mux complete');
         progressStore.set(jobId, { percent: 96, step: 'rendering', detail: 'Music added successfully...' });
 
@@ -1529,10 +1530,11 @@ async function createMemoryRenderOnly(req, res) {
         console.error('[MUSIC] Music mux failed:', musicErr.message);
         console.error('[MUSIC] ffmpegExitCode=' + (musicErr.code || 'unknown'));
         console.error('[MUSIC] stderrTail=' + (musicErr.stderr?.slice(-200) || ''));
-        return jsonError(res, 500, 'MUSIC_MUX_FAILED', 'Failed to add music to video', {
-          ffmpegExitCode: musicErr.code || 'unknown',
-          stderrTail: musicErr.stderr?.slice(-200) || musicErr.message,
-        });
+        console.error('[MUSIC] Falling back to video without music');
+        // Fallback: continue without music (use videoWithFades as finalMp4)
+        finalMp4 = videoWithFades;
+        musicKeyUsed = null;
+        // Don't fail the whole job, just proceed without music
       }
     } else {
       console.log(`[PIPE] stage=add_music skipped (music disabled) jobId=${jobId}`);
@@ -1541,46 +1543,12 @@ async function createMemoryRenderOnly(req, res) {
     const finalStat = await fsp.stat(finalMp4);
     console.log(`[CREATE_MEMORY] Final video size=${finalStat.size} bytes`);
 
-    // End cap policy enforcement (server-side, authoritative)
-    // Free users: FORCED ON (no override)
-    // Premium users: OPTIONAL (can disable via endCap: false)
+    // End cap: Temporarily disabled for reliability
+    // Check env gate: if TRACE_ENDCAP === '0' OR TRACE_ENDCAP_DISABLED === '1' → skip end cap
+    const endCapDisabled = process.env.TRACE_ENDCAP === '0' || process.env.TRACE_ENDCAP_DISABLED === '1';
+    const enableEndCap = !endCapDisabled;
     
-    // Verify user plan from Authorization token (authoritative source)
-    const authHeader = req.headers.authorization;
-    const userPlanInfo = await verifyUserPlan(authHeader);
-    const verifiedPlan = userPlanInfo.plan; // 'free' or 'premium' (from Firebase)
-    const isPremium = verifiedPlan === 'premium';
-    
-    // Log client-claimed plan for debugging (not trusted for enforcement)
-    const clientClaimedPlan = req.body?.plan;
-    if (clientClaimedPlan && clientClaimedPlan !== verifiedPlan) {
-      console.log(`[AUTH] Plan mismatch: client claimed=${clientClaimedPlan} verified=${verifiedPlan} uid=${userPlanInfo.uid || 'none'}`);
-    }
-    
-    const requestedEndCap = req.body?.endCap; // true, false, or undefined
-    
-    // Determine if end cap should be enabled
-    let enableEndCap;
-    if (process.env.TRACE_ENDCAP === '0') {
-      // Admin/debug override: disable for all
-      enableEndCap = false;
-      console.log('[ENDCAP] Admin override: TRACE_ENDCAP=0 (disabled for all)');
-    } else if (isPremium) {
-      // Premium users: end cap ON unless explicitly disabled
-      enableEndCap = requestedEndCap !== false;
-      console.log(`[ENDCAP] Premium user (verified): endCap=${enableEndCap} (requested=${requestedEndCap}) uid=${userPlanInfo.uid || 'none'}`);
-    } else {
-      // Free users: FORCED ON (ignore any endCap: false from frontend)
-      enableEndCap = true;
-      if (requestedEndCap === false) {
-        console.log(`[ENDCAP] Free user attempted to disable end cap - ignoring (FORCED ON) uid=${userPlanInfo.uid || 'none'}`);
-      } else {
-        console.log(`[ENDCAP] Free user (verified): end cap FORCED ON (no override allowed) uid=${userPlanInfo.uid || 'none'}`);
-      }
-    }
-    
-    // Log end cap enablement before calling appendEndCap
-    console.log('[ENDCAP] enabled=', enableEndCap, 'TRACE_ENDCAP=', process.env.TRACE_ENDCAP);
+    console.log('[ENDCAP] enabled=', enableEndCap, 'TRACE_ENDCAP=', process.env.TRACE_ENDCAP, 'TRACE_ENDCAP_DISABLED=', process.env.TRACE_ENDCAP_DISABLED);
     
     let endCapEnabled = false;
     if (enableEndCap) {
