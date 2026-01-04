@@ -3,10 +3,14 @@ import fsp from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
 
 import { S3Client, GetObjectCommand, PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createFramePlan, applyFramePlan, createFramePlansBatch } from './auto-reframe.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // -------------------- Config --------------------
 const AWS_REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-2';
@@ -314,6 +318,117 @@ async function applyFades(inputVideoPath, outputPath, duration) {
   console.log('[FADE] videoFadeIn=' + fadeIn + ' videoFadeOut=' + fadeOut + ' duration=' + duration);
   const result = await run(ffmpeg, args, { env: process.env });
   return result;
+}
+
+/**
+ * Find the assets directory containing the TRACE logo
+ */
+function findLogoPath() {
+  const logoName = 'Trace_Logo_1K_v2_hy001.png';
+  const possiblePaths = [
+    path.join(process.cwd(), 'assets', logoName),
+    path.join(process.cwd(), 'server', 'assets', logoName),
+    path.join(__dirname, 'assets', logoName),
+    path.join(__dirname, '..', 'assets', logoName),
+  ];
+  
+  for (const logoPath of possiblePaths) {
+    if (fs.existsSync(logoPath)) {
+      return logoPath;
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Append cinematic end cap to video (freeze last frame → fade to black → logo overlay)
+ * @param {string} inputMp4Path - Input video path
+ * @param {string} outputMp4Path - Output video path (with end cap appended)
+ * @returns {Promise<void>}
+ */
+async function appendEndCap(inputMp4Path, outputMp4Path) {
+  const ffmpeg = pickFfmpegPath();
+  const logoPath = findLogoPath();
+  
+  if (!logoPath) {
+    throw new Error('TRACE logo not found in assets directory');
+  }
+  
+  // Get video dimensions and duration
+  const videoDuration = await ffprobeDurationSeconds(inputMp4Path);
+  const ffprobe = pickFfprobePath();
+  
+  // Get video dimensions
+  const { stdout: probeStdout } = await run(ffprobe, [
+    '-v', 'error',
+    '-select_streams', 'v:0',
+    '-show_entries', 'stream=width,height',
+    '-of', 'json',
+    inputMp4Path,
+  ]);
+  const probeData = JSON.parse(probeStdout);
+  const width = probeData.streams?.[0]?.width || 1920;
+  const height = probeData.streams?.[0]?.height || 1080;
+  
+  // End cap timings:
+  // - Freeze last frame: 0.75s
+  // - Fade to black: 1.0s (starts at 0.75s, ends at 1.75s)
+  // - Black hold with logo: 1.25s (starts at 1.75s, ends at 3.0s)
+  // Total end cap duration: 3.0s
+  const freezeDuration = 0.75;
+  const fadeDuration = 1.0;
+  const blackHoldDuration = 1.25;
+  const endCapDuration = freezeDuration + fadeDuration + blackHoldDuration; // 3.0s
+  
+  // Audio fade out over last 2.0s of final output
+  const audioFadeOutDuration = 2.0;
+  const audioFadeOutStart = videoDuration + endCapDuration - audioFadeOutDuration;
+  
+  // Complex filtergraph:
+  // [0:v] Extract last frame, freeze for 0.75s, then fade to black over 1.0s → [freeze_fade]
+  // [1:v] Scale logo to fit (max 30% of frame size), centered → [logo_scaled]
+  // [freeze_fade] Create black background for 3.0s → [black]
+  // [black][logo_scaled] Overlay logo centered, starting at 1.75s (after freeze+fade) → [endcap]
+  // [0:v][endcap] Concatenate → [vout]
+  // [0:a] Audio with fade out → [aout]
+  
+  const logoScale = Math.min(width, height) * 0.3; // 30% of smaller dimension
+  const logoX = `(W-w)/2`; // Center X
+  const logoY = `(H-h)/2`; // Center Y
+  
+  const filterComplex = [
+    // Extract last frame, freeze for 0.75s, then fade to black over 1.0s
+    `[0:v]trim=start=${videoDuration - 0.01}:end=${videoDuration},setpts=PTS-STARTPTS,loop=loop=-1:size=1:start=0,trim=duration=${freezeDuration + fadeDuration},setpts=PTS-STARTPTS,fade=t=out:st=${freezeDuration}:d=${fadeDuration}[freeze_fade]`,
+    // Create black background for end cap duration
+    `color=c=black:s=${width}x${height}:d=${endCapDuration}[black]`,
+    // Scale logo
+    `[1:v]scale=${logoScale}:-1:flags=lanczos[logo_scaled]`,
+    // Overlay logo on black, starting at 1.75s (after freeze + fade)
+    `[black][logo_scaled]overlay=${logoX}:${logoY}:enable='between(t,${freezeDuration + fadeDuration},${endCapDuration})'[endcap]`,
+    // Concatenate original video with end cap
+    `[0:v][endcap]concat=n=2:v=1:a=0[vout]`,
+    // Audio fade out over last 2.0s
+    `[0:a]afade=t=out:st=${audioFadeOutStart}:d=${audioFadeOutDuration}[aout]`,
+  ].join(';');
+  
+  const args = [
+    '-y',
+    '-i', inputMp4Path,
+    '-i', logoPath,
+    '-filter_complex', filterComplex,
+    '-map', '[vout]',
+    '-map', '[aout]',
+    '-c:v', 'libx264',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    '-pix_fmt', 'yuv420p',
+    '-movflags', '+faststart',
+    outputMp4Path,
+  ];
+  
+  console.log('[ENDCAP] Appending end cap: freeze=0.75s fade=1.0s black_hold=1.25s logo_overlay total=' + endCapDuration + 's');
+  await run(ffmpeg, args, { env: process.env });
 }
 
 async function muxAudioVideo(videoPath, audioPath, outputPath, videoDuration) {
@@ -928,6 +1043,27 @@ async function createMemoryRenderOnly(req, res) {
 
     const finalStat = await fsp.stat(finalMp4);
     console.log(`[CREATE_MEMORY] Final video size=${finalStat.size} bytes`);
+
+    // Apply end cap if enabled (default ON)
+    const enableEndCap = process.env.TRACE_ENDCAP !== '0';
+    if (enableEndCap) {
+      try {
+        const endCapMp4 = path.join(outDir, 'final_with_endcap.mp4');
+        console.log('[ENDCAP] Starting end cap append...');
+        await appendEndCap(finalMp4, endCapMp4);
+        console.log('[ENDCAP] End cap appended successfully');
+        // Replace finalMp4 with end cap version
+        await fsp.rename(endCapMp4, finalMp4);
+        const endCapStat = await fsp.stat(finalMp4);
+        console.log(`[ENDCAP] Final video with end cap size=${endCapStat.size} bytes`);
+      } catch (endCapError) {
+        console.error('[ENDCAP] Failed to append end cap:', endCapError.message);
+        console.error('[ENDCAP] Falling back to original video (no end cap)');
+        // Continue with original finalMp4 (no end cap)
+      }
+    } else {
+      console.log('[ENDCAP] End cap disabled via TRACE_ENDCAP=0');
+    }
 
     // Upload to published
     const videoKey = `videos/published/${jobId}.mp4`;
