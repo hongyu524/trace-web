@@ -7,7 +7,7 @@ export default function Header({ onNavigate, centered = false }: HeaderProps) {
   if (centered) {
     return (
       <header className="w-full bg-black border-b border-white/10 sticky top-0 z-50">
-        <nav className="max-w-7xl mx-auto px-6 lg:px-8 py-4 flex items-center justify-center">
+        <nav className="max-w-7xl mx-auto px-6 lg:px-8 py-4 flex items-center justify-center min-h-[56px]">
           {/* Navigation Links - Centered */}
           <div className="flex items-center space-x-8">
             <button
@@ -38,7 +38,7 @@ export default function Header({ onNavigate, centered = false }: HeaderProps) {
 
   return (
     <header className="w-full bg-black border-b border-white/10 sticky top-0 z-50">
-      <nav className="max-w-7xl mx-auto px-6 lg:px-8 py-4 flex items-center justify-between">
+      <nav className="max-w-7xl mx-auto px-6 lg:px-8 py-4 flex items-center justify-between min-h-[56px]">
         {/* Navigation Links - Left */}
         <div className="flex items-center space-x-6">
           <button
