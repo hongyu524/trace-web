@@ -183,8 +183,125 @@ function calculateMaxPanAtScale(scale: number, frameWidth: number, safetyPx: num
 }
 
 /**
- * Pick a documentary motion preset based on shot metadata and weights
- * Implements selection logic to avoid repeats and ensure distribution
+ * Choose motion preset based on story position and continuity rules
+ * Lightweight story planner that creates narrative arc
+ * 
+ * Rules:
+ * - First 1-2 shots: SLOW_PUSH_IN only (endScale ~1.02-1.03 handled in transform)
+ * - Middle shots: DRIFT (mostly X), driftPercent 0.4-1.2, endScale derived
+ * - Detail shots (high-saliency or faces): PUSH_IN slightly stronger (1.03-1.045)
+ * - Last 1 shot: SLOW_PULL_BACK or very light PUSH_IN (resolution)
+ * - Avoid repeating same preset more than 2x in a row
+ * - Maintain drift direction continuity for 2-3 shots then change
+ */
+function choosePreset(
+  shotIndex: number,
+  totalShots: number,
+  shotMeta: ShotMetadata,
+  rng: SeededRNG,
+  config: DocumentaryMotionConfig
+): MotionPresetName {
+  const position = shotIndex / Math.max(1, totalShots - 1); // 0.0 to 1.0
+  
+  // Track drift direction continuity
+  const isDriftL = shotMeta.previousPreset === 'LATERAL_DRIFT_L';
+  const isDriftR = shotMeta.previousPreset === 'LATERAL_DRIFT_R';
+  const isDrift = isDriftL || isDriftR;
+  const wasDriftL = shotMeta.previousPreviousPreset === 'LATERAL_DRIFT_L';
+  const wasDriftR = shotMeta.previousPreviousPreset === 'LATERAL_DRIFT_R';
+  
+  // Count consecutive drifts in same direction
+  let consecutiveDrifts = 0;
+  if (isDriftL && wasDriftL) consecutiveDrifts = 2;
+  else if (isDriftR && wasDriftR) consecutiveDrifts = 2;
+  else if (isDrift) consecutiveDrifts = 1;
+  
+  // First 1-2 shots: SLOW_PUSH_IN only
+  if (shotIndex < 2) {
+    return 'SLOW_PUSH_IN';
+  }
+  
+  // Last shot: SLOW_PULL_BACK or very light PUSH_IN (resolution)
+  if (shotIndex === totalShots - 1) {
+    if (rng.next() < 0.6) {
+      return 'SLOW_PULL_BACK';
+    } else {
+      return 'SLOW_PUSH_IN'; // Very light push-in for resolution
+    }
+  }
+  
+  // Avoid repeating same preset more than 2x in a row
+  if (shotMeta.previousPreset === shotMeta.previousPreviousPreset && shotMeta.previousPreset) {
+    const lastPreset = shotMeta.previousPreset;
+    
+    if (lastPreset === 'SLOW_PUSH_IN') {
+      // After 2 push-ins, prefer drift (maintain direction continuity)
+      if (consecutiveDrifts >= 2) {
+        // Switch direction after 2-3 shots
+        return isDriftL ? 'LATERAL_DRIFT_R' : 'LATERAL_DRIFT_L';
+      } else if (wasDriftL) {
+        return 'LATERAL_DRIFT_L';
+      } else if (wasDriftR) {
+        return 'LATERAL_DRIFT_R';
+      } else {
+        return rng.next() < 0.5 ? 'LATERAL_DRIFT_L' : 'LATERAL_DRIFT_R';
+      }
+    }
+    
+    if (lastPreset === 'LATERAL_DRIFT_L' || lastPreset === 'LATERAL_DRIFT_R') {
+      // After 2 drifts, prefer push-in
+      return 'SLOW_PUSH_IN';
+    }
+    
+    if (lastPreset === 'SLOW_PULL_BACK') {
+      // After 2 pull-backs, prefer push-in
+      return 'SLOW_PUSH_IN';
+    }
+  }
+  
+  // Maintain drift direction continuity for 2-3 shots then change
+  if (isDrift && consecutiveDrifts < 2) {
+    // Continue same direction for 2-3 shots
+    return isDriftL ? 'LATERAL_DRIFT_L' : 'LATERAL_DRIFT_R';
+  }
+  
+  if (isDrift && consecutiveDrifts >= 2) {
+    // After 2-3 shots in same direction, change direction or switch to push-in
+    if (rng.next() < 0.7) {
+      // 70% chance to switch direction (no ping-pong per shot)
+      return isDriftL ? 'LATERAL_DRIFT_R' : 'LATERAL_DRIFT_L';
+    } else {
+      // 30% chance to switch to push-in
+      return 'SLOW_PUSH_IN';
+    }
+  }
+  
+  // Middle shots: DRIFT (mostly X) or PUSH_IN
+  // More drift in middle section (position 0.2-0.8), less near edges
+  const isMiddle = position > 0.2 && position < 0.8;
+  const driftProbability = isMiddle ? 0.4 : 0.2; // 40% drift in middle, 20% near edges
+  
+  const rand = rng.next();
+  
+  if (rand < driftProbability) {
+    // Choose drift direction (maintain continuity if possible)
+    if (wasDriftL && !isDrift) {
+      return 'LATERAL_DRIFT_L'; // Continue L direction
+    } else if (wasDriftR && !isDrift) {
+      return 'LATERAL_DRIFT_R'; // Continue R direction
+    } else {
+      // Random direction (50/50)
+      return rng.next() < 0.5 ? 'LATERAL_DRIFT_L' : 'LATERAL_DRIFT_R';
+    }
+  } else {
+    // Default to push-in
+    return 'SLOW_PUSH_IN';
+  }
+}
+
+/**
+ * Pick a documentary motion preset based on shot metadata and story planning
+ * Uses lightweight story planner for narrative arc
  */
 export function pickDocumentaryPreset(
   shotMeta: ShotMetadata,
@@ -193,62 +310,9 @@ export function pickDocumentaryPreset(
 ): MotionPresetName {
   const cfg = config ?? getDocumentaryDefaults();
   const seedRNG = rng ?? new SeededRNG(generateSeed(shotMeta));
-
-  // Avoid drift twice in a row
-  if (shotMeta.previousPreset === 'LATERAL_DRIFT_L' || shotMeta.previousPreset === 'LATERAL_DRIFT_R') {
-    if (shotMeta.previousPreviousPreset === 'LATERAL_DRIFT_L' || shotMeta.previousPreviousPreset === 'LATERAL_DRIFT_R') {
-      // Two drifts in a row, prefer static
-      if (seedRNG.next() < 0.7) {
-        return 'STATIC';
-      }
-    }
-  }
-
-  // Avoid pull-back twice in a row
-  if (shotMeta.previousPreset === 'SLOW_PULL_BACK') {
-    if (seedRNG.next() < 0.8) {
-      return 'STATIC';
-    }
-  }
-
-  // Prefer STATIC after two moving shots
-  if (
-    shotMeta.previousPreset &&
-    shotMeta.previousPreset !== 'STATIC' &&
-    shotMeta.previousPreviousPreset &&
-    shotMeta.previousPreviousPreset !== 'STATIC'
-  ) {
-    if (seedRNG.next() < 0.6) {
-      return 'STATIC';
-    }
-  }
-
-  // Weighted selection based on config
-  const rand = seedRNG.next();
-  let cumulative = 0;
-
-  cumulative += cfg.staticWeight;
-  if (rand < cumulative) return 'STATIC';
-
-  cumulative += cfg.pushInWeight;
-  if (rand < cumulative) return 'SLOW_PUSH_IN';
-
-  cumulative += cfg.driftWeight / 2;
-  if (rand < cumulative) return 'LATERAL_DRIFT_L';
-
-  cumulative += cfg.driftWeight / 2;
-  if (rand < cumulative) return 'LATERAL_DRIFT_R';
-
-  cumulative += cfg.pullBackWeight;
-  if (rand < cumulative) return 'SLOW_PULL_BACK';
-
-  // Parallax only if supported (default 0% weight)
-  if (cfg.parallaxWeight > 0 && rand < cumulative + cfg.parallaxWeight) {
-    return 'PARALLAX_PUSH_IN';
-  }
-
-  // Fallback to static
-  return 'STATIC';
+  
+  // Use story planner instead of random selection
+  return choosePreset(shotMeta.index, shotMeta.totalShots, shotMeta, seedRNG, cfg);
 }
 
 /**
