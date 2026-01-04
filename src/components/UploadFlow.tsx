@@ -232,7 +232,12 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
           clearInterval(progressInterval);
         }
         console.error('[UploadFlow] Render failed:', renderError.message);
-        setError(renderError.message || "Failed to create memory video. Please try again.");
+        // Show user-friendly error message
+        let errorMessage = renderError.message || "Failed to create memory video. Please try again.";
+        if (errorMessage.includes('taking longer than expected')) {
+          errorMessage = "Render is taking longer than expected. Please retry or check status.";
+        }
+        setError(errorMessage);
         setLoading(false);
         setProgress(null);
         return;
