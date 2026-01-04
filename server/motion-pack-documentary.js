@@ -78,16 +78,18 @@ function linear(t) {
  * @param {number} driftPx - Requested drift in pixels
  * @param {number} frameWidth - Output frame width
  * @param {number} scale - Current scale factor
+ * @param {string} motionPack - Motion pack type ('documentary' or 'default')
  * @returns {number} Clamped drift in pixels
  */
-function clampDriftForScale(driftPx, frameWidth, scale) {
+function clampDriftForScale(driftPx, frameWidth, scale, motionPack = 'default') {
   // Maximum safe translation: (scaledWidth - frameWidth) / 2
   // scaledWidth = frameWidth * scale
   // maxTx = (frameWidth * scale - frameWidth) / 2 = frameWidth * (scale - 1) / 2
   const maxTx = (frameWidth * (scale - 1)) / 2;
   
-  // Add 2px safety margin
-  const safeMaxTx = Math.max(0, maxTx - 2);
+  // Safety margin: 2px for default/gallery, 1px for documentary (tighter but still safe)
+  const safetyMargin = motionPack === 'documentary' ? 1 : 2;
+  const safeMaxTx = Math.max(0, maxTx - safetyMargin);
   
   // Clamp drift to safe range
   const clampedDrift = Math.min(Math.abs(driftPx), safeMaxTx);
