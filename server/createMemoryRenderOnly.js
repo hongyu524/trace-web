@@ -1639,7 +1639,7 @@ async function createMemoryRenderOnly(req, res) {
     console.log(`[CREATE_MEMORY] finalDurationSec = ${finalDurationSec ? finalDurationSec.toFixed(2) : 'null'}`);
     console.log(`[CREATE_MEMORY] motionPackUsed = ${finalMotionPack}`);
     console.log(`[CREATE_MEMORY] motionEnabled = ${motionEnabled}`);
-    console.log(`[CREATE_MEMORY] endCapEnabled = ${endCapEnabled}`);
+    console.log(`[CREATE_MEMORY] endCapEnabled = false (removed)`);
     console.log(`[CREATE_MEMORY] musicTrackUsed = ${musicKeyUsed || 'none'}`);
     console.log(`[CREATE_MEMORY] ========================================`);
 
@@ -1663,7 +1663,7 @@ async function createMemoryRenderOnly(req, res) {
       finalDurationSec: finalDurationSec ? parseFloat(finalDurationSec.toFixed(2)) : null,
       motionPackUsed: finalMotionPack,
       motionEnabled: motionEnabled,
-      endCapEnabled: endCapEnabled,
+      endCapEnabled: false,
       musicTrackUsed: musicKeyUsed || null,
       missingKeys: [],
       orderUsed: order || [],
