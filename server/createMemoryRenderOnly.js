@@ -561,9 +561,12 @@ async function createMemoryRenderOnly(req, res) {
       frameRate: rawFrameRate, // Accept both fps and frameRate for compatibility
       context = '',
       enableMusic = true,
-      motionPack = req.body.motionPack || 'default',
+      motionPack = 'default',
       autoReframe = true, // Default true
     } = req.body || {};
+    
+    // Override motionPack from req.body if provided
+    const finalMotionPack = req.body?.motionPack || motionPack;
 
     // Comprehensive logging at handler start
     console.log('[CREATE_MEMORY] ========================================');
