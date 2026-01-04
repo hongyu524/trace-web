@@ -872,11 +872,10 @@ function buildZoompanExpr({ startZoom, endZoom, focalX, focalY, panOffsetX, panO
   const focalPY = `${focalY} * ih`;
 
   // Pan offset (only applied during move phase, clamped to 1-3% of frame width)
-  const MIN_PAN_NORM = 0.01;  // 1% minimum
-  const MAX_PAN_NORM = 0.03;  // 3% maximum
-  const panDistance = MIN_PAN_NORM + (MAX_PAN_NORM - MIN_PAN_NORM) * Math.abs(panOffsetX); // Scale based on panOffsetX magnitude
-  const panDX = `${panOffsetX} * ${panDistance} * iw`;
-  const panDY = `${panOffsetY} * ${panDistance} * ih * 0.5`;
+  // Use 2% as middle ground (within 1-3% range)
+  const PAN_NORM = 0.02;  // 2% of frame width (within 1-3% range)
+  const panDX = `${panOffsetX} * ${PAN_NORM} * iw`;
+  const panDY = `${panOffsetY} * ${PAN_NORM} * ih * 0.5`;
 
   // Center position: locked to focal point during hold phase (zero movement)
   // Then apply subtle drift during move phase using smootherstep
@@ -908,26 +907,37 @@ async function renderSlideshow({
   const ffmpeg = pickFfmpegPath();
 
   // Determine output dimensions based on aspect ratio
-  let width, height;
+  // Render at 4K (3840x2160) and downscale to 1080p with lanczos to eliminate integer stepping/jitter
+  let renderWidth, renderHeight;
+  let outputWidth, outputHeight;
+  
   if (aspectRatio === '1:1') {
-    // Square
-    width = 1080;
-    height = 1080;
+    // Square - 4K: 2160x2160, output: 1080x1080
+    renderWidth = 2160;
+    renderHeight = 2160;
+    outputWidth = 1080;
+    outputHeight = 1080;
   } else if (aspectRatio === '9:16' || aspectRatio === 'portrait') {
-    // Portrait
-    width = 1080;
-    height = 1920;
+    // Portrait - 4K: 2160x3840, output: 1080x1920
+    renderWidth = 2160;
+    renderHeight = 3840;
+    outputWidth = 1080;
+    outputHeight = 1920;
   } else if (aspectRatio === '2.39:1' || aspectRatio === '239:100') {
-    // Ultrawide (CinemaScope)
-    width = 1920;
-    height = 803; // 1920 / 2.39 ≈ 803
+    // Ultrawide (CinemaScope) - 4K: 3840x1607, output: 1920x803
+    renderWidth = 3840;
+    renderHeight = 1607; // 3840 / 2.39 ≈ 1607
+    outputWidth = 1920;
+    outputHeight = 803;
   } else {
-    // Default: 16:9 landscape
-    width = 1920;
-    height = 1080;
+    // Default: 16:9 landscape - 4K: 3840x2160, output: 1920x1080
+    renderWidth = 3840;
+    renderHeight = 2160;
+    outputWidth = 1920;
+    outputHeight = 1080;
   }
   
-  console.log(`[RENDER] aspectRatio=${aspectRatio} dimensions=${width}x${height} fps=${fps}`);
+  console.log(`[RENDER] aspectRatio=${aspectRatio} renderDimensions=${renderWidth}x${renderHeight} outputDimensions=${outputWidth}x${outputHeight} fps=${fps}`);
 
   // Timing calculation with deterministic filtergraph
   // N = number of images, xf = crossfade duration
@@ -1007,17 +1017,17 @@ async function renderSlideshow({
   // Log per-segment timing for verification
   console.log(`[PLAN] clipDur=${clipDur.toFixed(3)}s segmentFrames=${segmentFrames} xfadeFrames=${xfadeFrames} hold=${hold.toFixed(3)}s xfade=${xf.toFixed(3)}s`);
   
-  // Process each input image: apply FOCUS_THEN_MOVE motion via zoompan, then format
+  // Process each input image: apply Documentary Gimbal Move via zoompan at 4K, then downscale
   for (let i = 0; i < N; i++) {
     const motion = motions[i];
     
-    // Scale source to base size (larger than output to allow zoom)
-    // Use output dimensions * maxZoom to ensure we have headroom
-    const maxZoom = Math.max(motion.startZoom, motion.endZoom, 1.06);
-    const baseWidth = Math.round(width * maxZoom);
-    const baseHeight = Math.round(height * maxZoom);
+    // Scale source to base size (larger than render resolution to allow zoom)
+    // Use render dimensions * maxZoom to ensure we have headroom
+    const maxZoom = Math.max(motion.startZoom, motion.endZoom, 1.055);
+    const baseWidth = Math.round(renderWidth * maxZoom);
+    const baseHeight = Math.round(renderHeight * maxZoom);
     
-    // Build zoompan expression using FOCUS_THEN_MOVE plan
+    // Build zoompan expression using Documentary Gimbal Move plan (render at 4K)
     const zoompanExpr = buildZoompanExpr({
       startZoom: motion.startZoom,
       endZoom: motion.endZoom,
@@ -1025,23 +1035,25 @@ async function renderSlideshow({
       focalY: motion.focalY,
       panOffsetX: motion.panOffsetX,
       panOffsetY: motion.panOffsetY,
-      holdFrac: motion.holdFrac,
+      holdSeconds: motion.holdSeconds,
       frames: segmentFrames,
-      W: width,
-      H: height,
+      fps: fps,
+      W: renderWidth,
+      H: renderHeight,
     });
     
     // Log segment motion (sample a few)
     if (i < 3 || i >= N - 1) {
-      console.log(`[FOCUS_THEN_MOVE] seg#${i} type=${motion.type} zoom ${motion.startZoom.toFixed(3)}→${motion.endZoom.toFixed(3)} focal=(${motion.focalX.toFixed(2)},${motion.focalY.toFixed(2)}) pan=(${motion.panOffsetX.toFixed(3)},${motion.panOffsetY.toFixed(3)}) duration=${clipDur.toFixed(2)}s`);
+      console.log(`[DOC_GIMBAL] seg#${i} type=${motion.type} zoom ${motion.startZoom.toFixed(3)}→${motion.endZoom.toFixed(3)} focal=(${motion.focalX.toFixed(2)},${motion.focalY.toFixed(2)}) pan=(${motion.panOffsetX.toFixed(3)},${motion.panOffsetY.toFixed(3)}) hold=${motion.holdSeconds}s duration=${clipDur.toFixed(2)}s`);
     }
     
-    // Process image: scale to base, apply zoompan motion (no rotation), crop to output, set fps and format
+    // Process image: scale to base, apply zoompan motion at 4K (no rotation), downscale to output with lanczos, set fps and format
     // Note: zoompan outputs exactly 'd' frames, so we don't need loop/trim
+    // Use lanczos downscaling to eliminate integer stepping/jitter
     filterParts.push(
       `[${i}:v]scale=${baseWidth}:${baseHeight}:force_original_aspect_ratio=increase,` +
       `${zoompanExpr},` +
-      `scale=${width}:${height},` +
+      `scale=${outputWidth}:${outputHeight}:flags=lanczos,` +
       `fps=${fps},` +
       `format=yuv420p[img${i}]`
     );
