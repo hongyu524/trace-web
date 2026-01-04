@@ -250,8 +250,15 @@ function generateDocumentaryMotionPlan(analysisResults, sequencePlan, outputWidt
   motionPlan.forEach(m => {
     const p = m.preset || m.movementType.toUpperCase();
     presetCounts[p] = (presetCounts[p] || 0) + 1;
+    // Track max scale used
+    maxScaleUsed = Math.max(maxScaleUsed, m.zoomStart || 1.0, m.zoomEnd || 1.0);
+  });
+  const countsByType = {};
+  Object.keys(presetCounts).forEach(key => {
+    countsByType[key] = presetCounts[key];
   });
   console.log(`[MOTION-PLANNING] Documentary pack distribution:`, presetCounts);
+  console.log(`[MOTION-PLANNING] packUsed=documentary countsByType=${JSON.stringify(countsByType)} maxScaleUsed=${maxScaleUsed.toFixed(3)}`);
   const staticCount = presetCounts['STATIC'] || 0;
   const staticPercent = ((staticCount / totalImages) * 100).toFixed(1);
   console.log(`[MOTION-PLANNING] Static shots: ${staticCount}/${totalImages} (${staticPercent}%)`);
