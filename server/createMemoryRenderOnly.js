@@ -411,10 +411,19 @@ async function applyFades(inputVideoPath, outputPath, duration) {
   return result;
 }
 
+// Logo path cache (lazy initialization)
+let cachedLogoPath = null;
+let logoPathChecked = false;
+
 /**
  * Find the assets directory containing the TRACE logo
  */
 function findLogoPath() {
+  // Cache the result after first check
+  if (logoPathChecked) {
+    return cachedLogoPath;
+  }
+  
   const logoName = 'Trace_Logo_1K_v2_hy001.png';
   const possiblePaths = [
     path.join(process.cwd(), 'assets', logoName),
@@ -425,10 +434,16 @@ function findLogoPath() {
   
   for (const logoPath of possiblePaths) {
     if (fs.existsSync(logoPath)) {
+      cachedLogoPath = logoPath;
+      logoPathChecked = true;
+      console.log('[ENDCAP] logoPath=', logoPath, 'exists=', true);
       return logoPath;
     }
   }
   
+  logoPathChecked = true;
+  cachedLogoPath = null;
+  console.log('[ENDCAP] logoPath=null exists=false (checked paths:', possiblePaths.join(', '), ')');
   return null;
 }
 
@@ -518,7 +533,12 @@ async function appendEndCap(inputMp4Path, outputMp4Path) {
   ];
   
   console.log('[ENDCAP] Appending end cap: freeze=0.75s fade=1.0s black_hold=1.25s logo_overlay total=' + endCapDuration + 's');
+  console.log('[ENDCAP] FFmpeg command:', ffmpeg, args.join(' '));
   await run(ffmpeg, args, { env: process.env });
+  
+  // Log success and verify output duration
+  const outputDuration = await ffprobeDurationSeconds(outputMp4Path);
+  console.log('[ENDCAP] Success! Output duration=', outputDuration.toFixed(2), 's (input was', videoDuration.toFixed(2), 's, endcap adds', endCapDuration.toFixed(2), 's)');
 }
 
 async function muxAudioVideo(videoPath, audioPath, outputPath, videoDuration) {
@@ -1024,6 +1044,10 @@ async function createMemoryRenderOnly(req, res) {
     console.log(`[CREATE_MEMORY] framesDir = ${renderFramesDir}`);
     console.log(`[CREATE_MEMORY] ffmpeg start -> ${silentMp4}`);
     
+    // Log motion status (currently motion is not applied in renderSlideshow)
+    const motionPlanUsed = null; // Motion planning is not currently integrated
+    console.log('[RENDER] motionEnabled=', Boolean(motionPlanUsed), '(motion not currently applied to frames)');
+    
     await renderSlideshow({
       framesDir: renderFramesDir,
       frameCount: orderedKeys.length,
@@ -1171,6 +1195,9 @@ async function createMemoryRenderOnly(req, res) {
         console.log(`[ENDCAP] Free user (verified): end cap FORCED ON (no override allowed) uid=${userPlanInfo.uid || 'none'}`);
       }
     }
+    
+    // Log end cap enablement before calling appendEndCap
+    console.log('[ENDCAP] enabled=', enableEndCap, 'TRACE_ENDCAP=', process.env.TRACE_ENDCAP);
     
     if (enableEndCap) {
       try {
