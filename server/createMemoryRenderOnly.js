@@ -456,7 +456,11 @@ async function applyFades(inputVideoPath, outputPath, duration) {
   ];
   
   console.log('[FADE] videoFadeIn=' + fadeIn + ' videoFadeOut=' + fadeOut + ' duration=' + duration);
-  const result = await run(ffmpeg, args, { env: process.env });
+  const result = await run(ffmpeg, args, { 
+    env: process.env,
+    timeout: 120000, // 2 minutes for video fades
+    stage: 'apply_fades'
+  });
   return result;
 }
 
