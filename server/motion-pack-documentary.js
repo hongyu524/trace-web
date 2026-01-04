@@ -292,10 +292,10 @@ function getDocumentaryTransformAt(t, preset, params) {
  * Convert documentary preset to motion-planning.js format
  * Maps documentary presets to existing motion system parameters
  */
-function convertDocumentaryPresetToMotionParams(preset, frameWidth, frameHeight, seed, config) {
-  // Get transform at start (t=0) and end (t=1)
-  const startTransform = getDocumentaryTransformAt(0, preset, { frameWidth, frameHeight, seed, config });
-  const endTransform = getDocumentaryTransformAt(1, preset, { frameWidth, frameHeight, seed: seed + 1, config });
+function convertDocumentaryPresetToMotionParams(preset, frameWidth, frameHeight, seed, config, motionPack = 'documentary') {
+  // Get transform at start (t=0) and end (t=1) - pass motionPack so eased curves and noise are applied
+  const startTransform = getDocumentaryTransformAt(0, preset, { frameWidth, frameHeight, seed, config, motionPack });
+  const endTransform = getDocumentaryTransformAt(1, preset, { frameWidth, frameHeight, seed: seed + 1, config, motionPack });
 
   // Convert to motion-planning.js format
   const params = {
