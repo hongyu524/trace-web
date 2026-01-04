@@ -124,8 +124,8 @@ export default async function handler(req: any, res: any) {
     }
 
     // Limit number of images
-    if (imageCount > 36) {
-      return res.status(400).json({ error: 'Too many images (max 36)' });
+    if (imageCount > 24) {
+      return res.status(400).json({ error: 'Too many images (max 24)' });
     }
 
     if (imageCount < 6) {
