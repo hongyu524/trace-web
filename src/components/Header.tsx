@@ -1,9 +1,5 @@
 interface HeaderProps {
   onNavigate?: (page: 'home' | 'pricing' | 'enterprise' | 'community') => void;
-}
-
-interface HeaderProps {
-  onNavigate?: (page: 'home' | 'pricing' | 'enterprise' | 'community') => void;
   centered?: boolean;
 }
 
