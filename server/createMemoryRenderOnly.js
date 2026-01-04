@@ -1024,12 +1024,10 @@ async function renderSlideshow({
     const motion = motions[i];
     
     if (isStaticMode || (motion.type === 'STATIC' && motion.startZoom === 1.0 && motion.endZoom === 1.0)) {
-      // Static mode: no motion, just scale/crop to output size, loop for duration, set fps
-      // Use scale with force_original_aspect_ratio=increase and crop to fit exactly
-      // This avoids pad filter issues and ensures exact dimensions
+      // Static mode: no motion, just scale to output size, loop for duration, set fps
+      // Auto-reframe already crops to target aspect ratio, so just scale to exact dimensions
       filterParts.push(
-        `[${i}:v]scale=${outputWidth}:${outputHeight}:force_original_aspect_ratio=increase,` +
-        `crop=${outputWidth}:${outputHeight},` +
+        `[${i}:v]scale=${outputWidth}:${outputHeight},` +
         `loop=loop=${segmentFrames}:size=1:start=0,` +
         `setpts=PTS-STARTPTS,` +
         `fps=${fps},` +
