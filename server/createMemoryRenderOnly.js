@@ -385,30 +385,29 @@ async function appendEndCap(inputMp4Path, outputMp4Path) {
   const audioFadeOutDuration = 2.0;
   const audioFadeOutStart = videoDuration + endCapDuration - audioFadeOutDuration;
   
-  // Complex filtergraph:
-  // [0:v] Extract last frame, freeze for 0.75s, then fade to black over 1.0s → [freeze_fade]
-  // [1:v] Scale logo to fit (max 30% of frame size), centered → [logo_scaled]
-  // [freeze_fade] Create black background for 3.0s → [black]
-  // [black][logo_scaled] Overlay logo centered, starting at 1.75s (after freeze+fade) → [endcap]
-  // [0:v][endcap] Concatenate → [vout]
-  // [0:a] Audio with fade out → [aout]
+  // Filtergraph approach:
+  // Step 1: Extract last frame, freeze for 0.75s, fade to black over 1.0s (1.75s total) → [freeze_fade]
+  // Step 2: Create black background with logo for 1.25s → [black_logo]
+  // Step 3: Concatenate [freeze_fade] + [black_logo] → [endcap] (3.0s total)
+  // Step 4: Concatenate original video + [endcap] → [vout]
+  // Step 5: Apply audio fade out → [aout]
   
   const logoScale = Math.min(width, height) * 0.3; // 30% of smaller dimension
   const logoX = `(W-w)/2`; // Center X
   const logoY = `(H-h)/2`; // Center Y
   
   const filterComplex = [
-    // Extract last frame, freeze for 0.75s, then fade to black over 1.0s
-    `[0:v]trim=start=${videoDuration - 0.01}:end=${videoDuration},setpts=PTS-STARTPTS,loop=loop=-1:size=1:start=0,trim=duration=${freezeDuration + fadeDuration},setpts=PTS-STARTPTS,fade=t=out:st=${freezeDuration}:d=${fadeDuration}[freeze_fade]`,
-    // Create black background for end cap duration
-    `color=c=black:s=${width}x${height}:d=${endCapDuration}[black]`,
-    // Scale logo
+    // Extract last frame, freeze for 0.75s, then fade to black over 1.0s (total 1.75s)
+    `[0:v]trim=start=${Math.max(0, videoDuration - 0.01)}:end=${videoDuration},setpts=PTS-STARTPTS,loop=loop=-1:size=1:start=0,trim=duration=${freezeDuration + fadeDuration},setpts=PTS-STARTPTS,fade=t=out:st=${freezeDuration}:d=${fadeDuration}[freeze_fade]`,
+    // Create black background with logo for black hold duration (1.25s)
+    `color=c=black:s=${width}x${height}:d=${blackHoldDuration}[blackbg]`,
     `[1:v]scale=${logoScale}:-1:flags=lanczos[logo_scaled]`,
-    // Overlay logo on black, starting at 1.75s (after freeze + fade)
-    `[black][logo_scaled]overlay=${logoX}:${logoY}:enable='between(t,${freezeDuration + fadeDuration},${endCapDuration})'[endcap]`,
+    `[blackbg][logo_scaled]overlay=${logoX}:${logoY}[black_logo]`,
+    // Concatenate freeze+fade segment with black+logo segment to create end cap (3.0s total)
+    `[freeze_fade][black_logo]concat=n=2:v=1:a=0[endcap]`,
     // Concatenate original video with end cap
     `[0:v][endcap]concat=n=2:v=1:a=0[vout]`,
-    // Audio fade out over last 2.0s
+    // Audio fade out over last 2.0s of final output
     `[0:a]afade=t=out:st=${audioFadeOutStart}:d=${audioFadeOutDuration}[aout]`,
   ].join(';');
   
