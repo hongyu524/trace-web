@@ -250,14 +250,13 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
         </button>
       )}
       
-      {/* Logo (optional - keeping it subtle) */}
-      <div className="absolute top-6 right-6 flex items-center space-x-2">
-        <div className="w-6 h-6 flex items-center justify-center">
-          <div className="w-5 h-5 border-2 border-cyan-400 border-t-0 border-b-0">
-            <div className="w-full h-full border-l-2 border-r-2 border-cyan-400"></div>
-          </div>
-        </div>
-        <span className="text-sm font-semibold text-cyan-400">TRACE</span>
+      {/* Logo */}
+      <div className="absolute top-6 right-6">
+        <img
+          src="/trace_logo_1k_v2_hy001.png"
+          alt="Trace"
+          className="w-10 h-10 object-contain"
+        />
       </div>
 
       <div className="max-w-4xl w-full space-y-8">
