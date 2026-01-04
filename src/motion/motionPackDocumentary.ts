@@ -144,19 +144,10 @@ function generateSeed(shotMeta: ShotMetadata, globalSeed?: number): number {
 }
 
 /**
- * Easing function: easeOutCubic (non-zero initial velocity, smooth deceleration)
+ * Clamp value to [0, 1] range
  */
-function easeOutCubic(t: number): number {
-  t = Math.max(0, Math.min(1, t));
-  return 1 - Math.pow(1 - t, 3);
-}
-
-/**
- * Easing function: easeInOut (for time remap, smooth transition)
- */
-function easeInOut(t: number): number {
-  t = Math.max(0, Math.min(1, t));
-  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+function clamp01(t: number): number {
+  return Math.max(0, Math.min(1, t));
 }
 
 /**
@@ -167,20 +158,34 @@ function lerp(a: number, b: number, t: number): number {
 }
 
 /**
- * Documentary progress function: time remap with cut-in for continuous motion from frame 1
- * Eliminates "pause then move" feel by starting mid-curve with non-zero initial velocity
- * @param t - Normalized time (0..1)
- * @param pStart - Starting point in ease curve (default 0.14 = 14% into curve)
- * @param pEnd - Ending point in ease curve (default 0.96 = 96% into curve)
- * @returns Eased progress value with non-zero initial velocity
+ * Easing function: easeOutCubic (non-zero initial velocity, smooth deceleration)
+ * Starts moving immediately
  */
-function docProgress(t: number, pStart: number = 0.14, pEnd: number = 0.96): number {
-  t = Math.max(0, Math.min(1, t));
-  // Time remap: lerp(pStart, pEnd, easeInOut(t))
-  // This creates a smooth curve that starts at pStart and ends at pEnd
-  const remappedT = lerp(pStart, pEnd, easeInOut(t));
-  // Apply easeOutCubic for non-zero initial velocity (smooth deceleration)
-  return easeOutCubic(remappedT);
+function easeOutCubic(t: number): number {
+  t = clamp01(t);
+  return 1 - Math.pow(1 - t, 3);
+}
+
+/**
+ * Easing function: easeOutSine (optional: still smooth but less "stopped" than in-out)
+ */
+function easeOutSine(t: number): number {
+  t = clamp01(t);
+  return Math.sin((t * Math.PI) / 2);
+}
+
+/**
+ * Cut-in progress: key function that cuts in mid-move so frame 1 is already moving
+ * This removes the "pause first" because you never start at progress = 0
+ * @param u - Normalized time (0..1)
+ * @param pStart - Starting point in progress (default 0.14 = 14% into curve)
+ * @param pEnd - Ending point in progress (default 0.96 = 96% into curve)
+ * @returns Progress value that starts at pStart (not 0) and ends at pEnd
+ */
+function cutInProgress(u: number, pStart: number = 0.14, pEnd: number = 0.96): number {
+  u = clamp01(u);
+  const e = easeOutCubic(u); // or easeOutSine(u) for alternative feel
+  return pStart + (pEnd - pStart) * e;
 }
 
 /**
@@ -378,13 +383,11 @@ export function getDocumentaryTransformAt(
 
     case 'SLOW_PUSH_IN': {
       // Scale: minScale -> maxScale (use default 1.025 for consistency)
-      const defaultEndScale = 1.025;
-      const endScale = defaultEndScale;
+      const scaleStart = cfg.minScale;
+      const scaleEnd = 1.025; // Default end scale
       
-      // Use docProgress with time remap for continuous motion from frame 1 (non-zero initial velocity)
-      const progress = docProgress(t);
-      
-      scale = cfg.minScale + (endScale - cfg.minScale) * progress;
+      // Push: scale lerps from scaleStart to scaleEnd using cut-in progress
+      scale = lerp(scaleStart, scaleEnd, p);
       translateX = 0;
       translateY = 0;
       break;
@@ -392,13 +395,11 @@ export function getDocumentaryTransformAt(
 
     case 'SLOW_PULL_BACK': {
       // Scale: maxScale -> minScale (pull back)
-      const startScale = cfg.maxScale;
-      const endScale = cfg.minScale;
+      const scaleStart = cfg.maxScale;
+      const scaleEnd = cfg.minScale;
       
-      // Use docProgress with time remap for continuous motion from frame 1 (non-zero initial velocity)
-      const progress = docProgress(t);
-      
-      scale = startScale - (startScale - endScale) * progress;
+      // Pull back: scale lerps from scaleStart to scaleEnd using cut-in progress
+      scale = lerp(scaleStart, scaleEnd, p);
       translateX = 0;
       translateY = 0;
       break;
@@ -432,36 +433,37 @@ export function getDocumentaryTransformAt(
         actualDriftPx = desiredDriftPx;
       }
       
-      // Use docProgress with time remap for continuous motion from frame 1 (non-zero initial velocity)
-      // Same progress for BOTH scale and translation (no linear drift)
-      const progress = docProgress(t);
+      // Drift (coupled zoom-pan): use same progress for BOTH scale and translation
+      // Scale: lerp from 1.0 to driftEndScale
+      const scaleStart = 1.0;
+      scale = lerp(scaleStart, endScale, p);
       
-      // Scale ramps with progress: scale(t) = 1 + (endScale - 1)*progress
-      // Start at scale 1.0, ramp to endScale
-      scale = 1.0 + (endScale - 1.0) * progress;
+      // Translate: lerp from 0 to actualDriftPx using same progress
+      const xStart = 0;
+      const xEnd = actualDriftPx;
+      const yStart = 0;
+      const yEnd = 0;
       
-      // Translate uses same progress, constrained by overscan rule
+      translateX = isLeft ? -lerp(xStart, xEnd, p) : lerp(xStart, xEnd, p);
+      translateY = lerp(yStart, yEnd, p);
+      
+      // Constrain translate to overscan rule at current scale
       // overscanPerSidePx = ((scale - 1) * frameWidth) / 2
       // abs(translateX) <= overscanPerSidePx - safetyPx
       const currentOverscanPerSide = ((scale - 1) * params.frameWidth) / 2;
       const maxTranslateAtCurrentScale = Math.max(0, currentOverscanPerSide - safetyMarginPx);
-      
-      // Apply drift with progress, clamped to current scale's overscan limit
-      const rawTranslateX = isLeft ? -actualDriftPx * progress : actualDriftPx * progress;
-      translateX = clamp(rawTranslateX, -maxTranslateAtCurrentScale, maxTranslateAtCurrentScale);
-      translateY = 0;
+      translateX = clamp(translateX, -maxTranslateAtCurrentScale, maxTranslateAtCurrentScale);
       break;
     }
 
     case 'PARALLAX_PUSH_IN': {
       // Parallax: background and foreground scale differently
       // For single-layer implementation, use subtle push-in
-      const endScale = 1.02; // Middle ground (consistent)
+      const scaleStart = cfg.minScale;
+      const scaleEnd = 1.02; // Middle ground (consistent)
       
-      // Use docProgress with time remap for continuous motion from frame 1 (non-zero initial velocity)
-      const progress = docProgress(t);
-      
-      scale = cfg.minScale + (endScale - cfg.minScale) * progress;
+      // Push: scale lerps from scaleStart to scaleEnd using cut-in progress
+      scale = lerp(scaleStart, scaleEnd, p);
       translateX = 0;
       translateY = 0;
       break;
