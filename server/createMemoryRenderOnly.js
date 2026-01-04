@@ -73,7 +73,8 @@ async function verifyUserPlan(authHeader) {
     const uid = decodedToken.uid;
     
     // Check custom claims first (preferred method)
-    const plan = decodedToken.plan || decodedToken.claims?.plan;
+    // Firebase custom claims are properties directly on decodedToken
+    const plan = decodedToken.plan;
     if (plan === 'premium') {
       return { verified: true, plan: 'premium', uid };
     }
