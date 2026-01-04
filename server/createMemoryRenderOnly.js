@@ -401,7 +401,10 @@ async function ffprobeDurationSeconds(filePath) {
     '-of', 'default=noprint_wrappers=1:nokey=1',
     filePath
   ];
-  const { stdout } = await run(ffprobe, args);
+  const { stdout } = await run(ffprobe, args, {
+    timeout: 30000, // 30 seconds
+    stage: 'ffprobe_duration_seconds'
+  });
   const v = parseFloat(String(stdout).trim());
   return Number.isFinite(v) ? v : 0;
 }
