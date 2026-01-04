@@ -1,35 +1,8 @@
-// Railway backend API base URL (set in Vercel environment variables)
-// In production, this MUST be set or API calls will fail
-// In development, falls back to localhost:8080 if not set
-const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "http://localhost:8080" : "");
-
-// Production validation: ensure VITE_API_BASE_URL is set
-if (import.meta.env.PROD && !API_BASE) {
-  const errorMsg = 'VITE_API_BASE_URL is not set in production. Please configure it in Vercel environment variables.';
-  console.error('[API] FATAL:', errorMsg);
-  
-  // Show error in UI if possible
-  if (typeof window !== 'undefined') {
-    document.body.innerHTML = `
-      <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: system-ui; padding: 2rem;">
-        <div style="max-width: 600px; text-align: center;">
-          <h1 style="color: #ef4444; margin-bottom: 1rem;">Configuration Error</h1>
-          <p style="color: #6b7280; margin-bottom: 0.5rem;">${errorMsg}</p>
-          <p style="color: #9ca3af; font-size: 0.875rem;">Please contact the administrator.</p>
-        </div>
-      </div>
-    `;
-  }
-  
-  throw new Error(errorMsg);
-}
-
-// Diagnostics: log API_BASE at runtime (non-secret, for debugging)
-if (typeof window !== 'undefined') {
-  console.log('[API_BASE]', API_BASE || '(not set)');
-  console.log('[SEQUENCE_URL]', '/api/sequence (same-origin Vercel)');
-  console.log('[RAILWAY_URL]', API_BASE ? `${API_BASE}/api/create-memory` : '(API_BASE not set)');
-}
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
+// Vercel API base - for OpenAI endpoints (sequence, vision)
+const VERCEL_API_BASE = typeof window !== 'undefined' 
+  ? window.location.origin 
+  : 'https://tracememory.store';
 
 export type SignedUrlPayload = {
   signedUrl: string | null;
@@ -41,31 +14,8 @@ export type SignedUrlPayload = {
 
 export type SequenceResponse = {
   order: number[];
-  sequence?: Array<{ key: string; order: number }>;
-  photoKeys?: string[];
   beats?: string[];
   rationale?: string;
-};
-
-export type CreateMemoryResponse = {
-  ok: boolean;
-  jobId?: string;
-  videoKey?: string;
-  playbackUrl?: string;
-  error?: string;
-  detail?: string;
-  aspectRatioUsed?: string;
-  fpsUsed?: number;
-  requestedImageCount?: number;
-  usableImageCount?: number;
-  imageCountUsed?: number;
-  targetDurationSec?: number;
-  holdSec?: number;
-  xfadeSec?: number;
-  actualDurationSec?: number | null;
-  missingKeys?: string[];
-  orderUsed?: number[];
-  musicKeyUsed?: string;
 };
 
 export type SequenceImage = {
@@ -75,244 +25,9 @@ export type SequenceImage = {
   mimeType?: string;
 };
 
-export type PresignedUploadResponse = {
-  url: string;
-  key: string;
-};
-
-/**
- * Get presigned PUT URL for uploading a photo to S3
- * Calls Railway backend /api/media/presign-upload
- */
-export async function getPresignedUploadUrl(
-  fileName: string,
-  contentType: string
-): Promise<PresignedUploadResponse> {
-  console.log('[API] Requesting presigned upload URL from Railway:', `${API_BASE}/api/media/presign-upload`);
-  const response = await fetch(`${API_BASE}/api/media/presign-upload`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      fileName,
-      contentType,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ error: 'Failed to get presigned upload URL' }));
-    throw new Error(errorData.error || `Presigned upload API error (${response.status})`);
-  }
-
-  const data = await response.json();
-  return data;
-}
-
-/**
- * Upload file directly to S3 using presigned PUT URL
- */
-export async function uploadFileToS3(
-  file: File,
-  url: string
-): Promise<void> {
-  console.log('[API] Uploading file to S3:', file.name, 'size:', file.size, 'bytes');
-  const response = await fetch(url, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': file.type,
-    },
-    body: file,
-  });
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => 'Unknown error');
-    throw new Error(`S3 upload failed (${response.status}): ${text}`);
-  }
-
-  console.log('[API] File uploaded successfully to S3');
-}
-
 /**
  * Get optimal image ordering from OpenAI
- * Calls Vercel serverless function /api/sequence (same-origin)
- * Now accepts S3 photo keys instead of base64 images
- */
-export async function getImageSequenceFromKeys(
-  photoKeys: string[],
-  context?: string,
-  aspectRatio?: string,
-  frameRate?: number
-): Promise<SequenceResponse> {
-  const payload = {
-    photoKeys,
-    context,
-    aspectRatio,
-    frameRate,
-  };
-  const payloadJson = JSON.stringify(payload);
-  const payloadSize = new Blob([payloadJson]).size;
-  
-  console.log('[API] Calling Vercel /api/sequence (same-origin)');
-  console.log('[API] Sequence payload keys:', Object.keys(payload));
-  console.log('[API] Sequence payload size:', payloadSize, 'bytes (', (payloadSize / 1024 / 1024).toFixed(2), 'MB)');
-  console.log('[API] Number of photo keys:', photoKeys.length);
-  
-  const response = await fetch('/api/sequence', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: payloadJson,
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ error: 'Failed to get sequence' }));
-    throw new Error(errorData.error || `Sequence API error (${response.status})`);
-  }
-
-  const data = await response.json();
-  console.log("[Sequence API response]", data);
-  
-  // Guard against undefined/missing fields
-  const responseSequence = Array.isArray(data?.sequence) ? data.sequence : [];
-  const responsePhotoKeys = Array.isArray(data?.photoKeys) ? data.photoKeys : [];
-  const order = Array.isArray(data?.order) ? data.order : [];
-  
-  // If order is empty but we have responsePhotoKeys, generate default order
-  const finalOrder = order.length > 0 ? order : responsePhotoKeys.map((_: string, i: number) => i);
-  
-  return {
-    order: finalOrder,
-    sequence: responseSequence,
-    photoKeys: responsePhotoKeys,
-    beats: Array.isArray(data?.beats) ? data.beats : undefined,
-    rationale: typeof data?.rationale === 'string' ? data.rationale : undefined,
-  };
-}
-
-/**
- * Get sequence order from Vercel /api/sequence
- * Calls same-origin Vercel serverless function
- */
-export async function getSequenceOrder(params: {
-  photoKeys: string[];
-  context?: string;
-}): Promise<SequenceResponse> {
-  const res = await fetch(`/api/sequence`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(params),
-  });
-
-  const text = await res.text();
-  let data: any;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error(`Sequence API returned non-JSON: ${text.slice(0, 200)}`);
-  }
-
-  if (!res.ok) {
-    throw new Error(data?.error || `Sequence API failed (${res.status})`);
-  }
-
-  if (!Array.isArray(data?.order)) {
-    throw new Error(`Sequence API missing 'order'. Got: ${text.slice(0, 200)}`);
-  }
-
-  return { order: data.order };
-}
-
-/**
- * Create memory video via Railway /api/create-memory
- * Calls Railway backend for render-only video creation
- * Includes timeout protection (10 minutes) to prevent indefinite hanging
- */
-export async function createMemoryRender(params: {
-  photoKeys: string[];
-  order: number[];
-  aspectRatio: string;
-  fps: number;
-  context?: string;
-}): Promise<CreateMemoryResponse> {
-  const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "http://localhost:8080" : "");
-  
-  if (!API_BASE) {
-    throw new Error("VITE_API_BASE_URL is not set. Cannot create memory.");
-  }
-
-  console.log(`[API] Calling Railway: ${API_BASE}/api/create-memory`);
-  
-  // Add timeout protection (10 minutes)
-  const timeoutMs = 10 * 60 * 1000; // 10 minutes
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    controller.abort();
-  }, timeoutMs);
-  
-  try {
-    const res = await fetch(`${API_BASE}/api/create-memory`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    const text = await res.text();
-    let data: any;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      throw new Error(`Create-memory returned non-JSON: ${text.slice(0, 200)}`);
-    }
-
-    if (!res.ok) {
-      return { ok: false, error: data?.error || "create_memory_failed", detail: data?.detail || text };
-    }
-
-    return data as CreateMemoryResponse;
-  } catch (err: any) {
-    clearTimeout(timeoutId);
-    if (err.name === 'AbortError') {
-      throw new Error('Render is taking longer than expected. Please retry or check status.');
-    }
-    throw err;
-  }
-}
-
-/**
- * Analyze images using OpenAI Vision API
- * Calls Vercel serverless function /api/vision (same-origin)
- */
-export async function analyzeImages(
-  images: SequenceImage[]
-): Promise<any[]> {
-  console.log('[API] Calling Vercel /api/vision (same-origin)');
-  const response = await fetch('/api/vision', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      images,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ error: 'Failed to analyze images' }));
-    throw new Error(errorData.error || `Vision API error (${response.status})`);
-  }
-
-  const data = await response.json();
-  return Array.isArray(data.analyses) ? data.analyses : [];
-}
-
-/**
- * Get optimal image ordering from OpenAI (LEGACY - uses base64)
- * @deprecated Use getImageSequenceFromKeys instead to avoid 413 errors
+ * Calls Vercel serverless function /api/sequence
  */
 export async function getImageSequence(
   images: SequenceImage[],
@@ -320,31 +35,17 @@ export async function getImageSequence(
   aspectRatio?: string,
   frameRate?: number
 ): Promise<SequenceResponse> {
-  const payload = {
-    images,
-    context,
-    aspectRatio,
-    frameRate,
-  };
-  const payloadJson = JSON.stringify(payload);
-  const payloadSize = new Blob([payloadJson]).size;
-  
-  console.log('[API] Calling Vercel /api/sequence (same-origin) - LEGACY base64 mode');
-  console.log('[API] Sequence payload keys:', Object.keys(payload));
-  console.log('[API] Sequence payload size:', payloadSize, 'bytes (', (payloadSize / 1024 / 1024).toFixed(2), 'MB)');
-  console.log('[API] Number of images:', images.length);
-  if (images.length > 0) {
-    const firstImage = images[0];
-    const imageDataSize = firstImage.base64 ? firstImage.base64.length : (firstImage.url ? firstImage.url.length : 0);
-    console.log('[API] Sample image data size:', imageDataSize, 'bytes (first image, base64 length)');
-  }
-  
-  const response = await fetch('/api/sequence', {
+  const response = await fetch(`${VERCEL_API_BASE}/api/sequence`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: payloadJson,
+    body: JSON.stringify({
+      images,
+      context,
+      aspectRatio,
+      frameRate,
+    }),
   });
 
   if (!response.ok) {
@@ -356,72 +57,8 @@ export async function getImageSequence(
   return data;
 }
 
-function normalizeVideoPath(p: string): string {
-  if (!p) return p;
-  // Ensure leading slash
-  if (!p.startsWith("/")) p = "/" + p;
-  // Ensure it starts with /videos/
-  if (!p.startsWith("/videos/")) {
-    // If caller passed "videos/...", this fixes it
-    if (p.startsWith("/videos")) return p;
-    // Otherwise do not guess; let backend reject with a clearer error
-  }
-  return p;
-}
-
-function isAlreadySignedUrl(u: string): boolean {
-  // CloudFront signed URL often contains these
-  return (
-    u.includes("Signature=") ||
-    u.includes("Key-Pair-Id=") ||
-    u.includes("Policy=") ||
-    // S3 presigned URLs
-    u.includes("X-Amz-Signature=") ||
-    u.includes("X-Amz-Credential=")
-  );
-}
-
-function toMediaPath(input: string): string | null {
-  // If it's a full URL, extract pathname
-  try {
-    const url = new URL(input);
-    return url.pathname.startsWith("/") ? url.pathname : `/${url.pathname}`;
-  } catch {
-    // Not a URL, assume it's already a path/key-ish
-    if (!input) return null;
-    if (input.startsWith("/")) return input;
-    return `/${input}`;
-  }
-}
-
-export async function resolvePlaybackUrl(playbackUrlOrPath: string): Promise<string> {
-  // If backend already gave us a signed URL, use it directly.
-  if (playbackUrlOrPath.startsWith("http") && isAlreadySignedUrl(playbackUrlOrPath)) {
-    return playbackUrlOrPath;
-  }
-
-  // Otherwise convert to a /videos/... path and sign it.
-  const path = toMediaPath(playbackUrlOrPath);
-
-  if (!path || !path.startsWith("/videos/")) {
-    throw new Error(`Invalid media path: ${path ?? "null"} (must start with /videos/)`);
-  }
-
-  const encoded = encodeURIComponent(path);
-  const res = await fetch(`${API_BASE}/api/media/signed-url?path=${encoded}`);
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to fetch signed URL (${res.status}): ${text}`);
-  }
-  const data = await res.json();
-  if (!data?.signedUrl) throw new Error("Missing signedUrl in response");
-  return data.signedUrl;
-}
-
 export async function fetchSignedVideoPayload(path: string, prefer?: string): Promise<SignedUrlPayload> {
-  console.log('[API] Calling Railway backend for signed URL:', `${API_BASE}/api/media/signed-url`);
-  const fixedPath = normalizeVideoPath(path);
-  const params = new URLSearchParams({ path: fixedPath });
+  const params = new URLSearchParams({ path });
   if (prefer) params.set('prefer', prefer);
   const resp = await fetch(`${API_BASE}/api/media/signed-url?${params.toString()}`);
   if (!resp.ok) {
@@ -443,7 +80,6 @@ export async function fetchSignedVideoPayload(path: string, prefer?: string): Pr
 }
 
 export async function fetchPlaybackUrl(key: string): Promise<string> {
-  console.log('[API] Calling Railway backend for playback URL:', `${API_BASE}/api/media/playback-url`);
   const params = new URLSearchParams({ key });
   const resp = await fetch(`${API_BASE}/api/media/playback-url?${params.toString()}`);
   if (!resp.ok) {
@@ -456,3 +92,4 @@ export async function fetchPlaybackUrl(key: string): Promise<string> {
   }
   return data.playbackUrl as string;
 }
+
