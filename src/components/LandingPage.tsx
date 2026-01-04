@@ -14,7 +14,7 @@ export default function LandingPage({ onStart, onNavigate }: LandingPageProps) {
               <img
                 src="/trace_logo_1k_v2_hy001.png"
                 alt="Trace"
-                className="w-40 h-40 lg:w-48 lg:h-48 object-contain"
+                className="w-80 h-80 lg:w-96 lg:h-96 object-contain"
               />
             </div>
 

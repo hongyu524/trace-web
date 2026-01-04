@@ -263,225 +263,203 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-black via-gray-900 to-black">
-      {/* Header Bar */}
-      <div className="w-full bg-black/80 backdrop-blur-xl border-b border-white/5 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-3 flex items-center justify-between">
-          {onBack && (
-            <button
-              onClick={onBack}
-              className="text-white/80 hover:text-white transition-colors flex items-center space-x-2 text-sm font-normal"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              <span>Back</span>
-            </button>
-          )}
-          {!onBack && <div></div>}
-          
-          <div className="flex items-center space-x-2">
-            <img
-              src="/trace_logo_1k_v2_hy001.png"
-              alt="TRACE"
-              className="w-6 h-6 object-contain opacity-90"
-            />
-            <span className="text-white text-sm font-medium tracking-tight">TRACE</span>
-          </div>
-        </div>
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 bg-gradient-to-b from-black via-gray-900 to-black py-12 relative">
+      {/* Back Button - Left Corner */}
+      {onBack && (
+        <button
+          onClick={onBack}
+          className="absolute top-6 left-6 text-gray-400 hover:text-white transition-colors flex items-center space-x-2 z-10"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          <span>Back</span>
+        </button>
+      )}
+      
+      {/* Logo - Right Corner */}
+      <div className="absolute top-6 right-6">
+        <img
+          src="/trace_logo_1k_v2_hy001.png"
+          alt="Trace"
+          className="w-12 h-12 object-contain"
+        />
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex items-center justify-center px-6 py-12 lg:py-16">
-        <div className="max-w-5xl w-full">
-          <div className="grid lg:grid-cols-3 gap-8 lg:gap-12">
-            {/* Left Column - Main Form */}
-            <div className="lg:col-span-2 space-y-8">
-              <div className="space-y-2">
-                <h1 className="text-3xl lg:text-4xl font-light text-white">Create Your Memory</h1>
-                <p className="text-gray-400">Upload 6-36 photos to create your cinematic memory film</p>
-              </div>
+      <div className="max-w-4xl w-full space-y-8">
+        <div className="text-center space-y-4">
+          <h1 className="text-3xl font-light text-white">Create Your Memory</h1>
+          <p className="text-gray-400 text-sm">Upload 6-36 photos to create your cinematic memory film</p>
+        </div>
 
-              <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Upload Section */}
-                <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700/30 rounded-lg p-6 space-y-4">
-                  <label className="block text-gray-300 text-sm font-medium">
-                    Upload Photos
-                  </label>
-                  <div className="flex gap-3">
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      onChange={handleFileChange}
-                      id="file-input"
-                      className="hidden"
-                    />
-                    <label
-                      htmlFor="file-input"
-                      className="cursor-pointer px-5 py-2.5 bg-gray-700/50 border border-gray-600/50 text-white rounded-sm hover:bg-gray-700 hover:border-gray-600 transition-colors text-sm"
-                    >
-                      Choose Files
-                    </label>
-                    {files.length > 0 && files.length < 36 && (
-                      <label
-                        htmlFor="file-input"
-                        className="cursor-pointer px-5 py-2.5 bg-gray-700/50 border border-gray-600/50 text-white rounded-sm hover:bg-gray-700 hover:border-gray-600 transition-colors text-sm"
-                      >
-                        Add More
-                      </label>
-                    )}
-                  </div>
-                  {files.length > 0 && (
-                    <p className="text-gray-500 text-sm">
-                      {files.length} photo{files.length !== 1 ? "s" : ""} selected
-                      {uploadStatus && (
-                        <span className="ml-3 text-gray-600">
-                          • Uploaded: {uploadStatus.uploaded} / {uploadStatus.selected}
-                        </span>
-                      )}
-                    </p>
-                  )}
-                </div>
-                
-                {/* Storytelling Context */}
-                <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700/30 rounded-lg p-6 space-y-3">
-                  <label className="block text-gray-300 text-sm font-medium">
-                    Storytelling Context <span className="text-gray-500 font-normal">(Optional)</span>
-                  </label>
-                  <textarea
-                    value={promptText}
-                    onChange={(e) => setPromptText(e.target.value)}
-                    placeholder="Describe the story or mood you want to capture... (e.g., &quot;A quiet weekend getaway with friends&quot;, &quot;Celebrating graduation with family&quot;)"
-                    rows={4}
-                    className="w-full px-4 py-3 bg-gray-900/50 border border-gray-700/50 text-white rounded-sm focus:outline-none focus:border-gray-600 resize-none placeholder:text-gray-600 text-sm"
-                  />
-                  <p className="text-xs text-gray-500">
-                    Help the AI understand the context to create a better storytelling order
-                  </p>
-                </div>
-
-                {/* Settings */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700/30 rounded-lg p-4 space-y-2">
-                    <label className="block text-gray-300 text-xs font-medium">
-                      Aspect Ratio
-                    </label>
-                    <select
-                      value={outputRatio}
-                      onChange={(e) => setOutputRatio(e.target.value)}
-                      className="w-full px-3 py-2 bg-gray-900/50 border border-gray-700/50 text-white rounded-sm focus:outline-none focus:border-gray-600 text-sm"
-                    >
-                      <option value="16:9" className="bg-gray-900">16:9 (HD)</option>
-                      <option value="2.39:1" className="bg-gray-900">2.39:1 (Film)</option>
-                      <option value="1:1" className="bg-gray-900">1:1 (Square)</option>
-                    </select>
-                  </div>
-
-                  <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700/30 rounded-lg p-4 space-y-2">
-                    <label className="block text-gray-300 text-xs font-medium">
-                      Frame Rate
-                    </label>
-                    <select
-                      value={fps}
-                      onChange={(e) => setFps(Number(e.target.value))}
-                      className="w-full px-3 py-2 bg-gray-900/50 border border-gray-700/50 text-white rounded-sm focus:outline-none focus:border-gray-600 text-sm"
-                    >
-                      <option value={24} className="bg-gray-900">24 fps (Cinematic)</option>
-                      <option value={30} className="bg-gray-900">30 fps (Smooth)</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Progress */}
-                {progress && (
-                  <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700/30 rounded-lg p-6 space-y-3">
-                    <div className="w-full bg-gray-900/50 rounded-full h-2">
-                      <div
-                        className="bg-cyan-500 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${Math.min(100, Math.max(0, progress.percent))}%` }}
-                      ></div>
-                    </div>
-                    <p className="text-sm text-gray-400">
-                      {progress.step}: {progress.detail} ({progress.percent.toFixed(1)}%)
-                    </p>
-                  </div>
-                )}
-
-                {/* Error */}
-                {error && (
-                  <div className="p-4 bg-red-900/20 border border-red-800/50 text-red-300 rounded-sm text-sm">
-                    {error}
-                  </div>
-                )}
-
-                {/* Submit Button */}
-                <button
-                  type="submit"
-                  disabled={loading || files.length < 6}
-                  className="w-full group relative px-8 py-4 bg-white text-black text-sm font-medium tracking-wide rounded-sm hover:bg-gray-100 transition-all duration-300 disabled:bg-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed"
+        <form onSubmit={handleSubmit} className="space-y-8">
+          <div>
+            <label className="block text-gray-300 text-sm font-medium mb-3">
+              Upload Photos
+            </label>
+            <div className="flex gap-3">
+              <input
+                type="file"
+                multiple
+                accept="image/*"
+                onChange={handleFileChange}
+                id="file-input"
+                className="hidden"
+              />
+              <label
+                htmlFor="file-input"
+                className="cursor-pointer px-4 py-2 bg-gray-800 border border-gray-700 text-white rounded-sm hover:bg-gray-700 transition-colors"
+              >
+                Choose Files
+              </label>
+              {files.length > 0 && files.length < 36 && (
+                <label
+                  htmlFor="file-input"
+                  className="cursor-pointer px-4 py-2 bg-gray-700 border border-gray-600 text-white rounded-sm hover:bg-gray-600 transition-colors"
                 >
-                  {loading ? "Creating Memory..." : "Create Memory"}
-                  <div className="absolute inset-0 rounded-sm ring-1 ring-white/20 group-hover:ring-white/40 transition-all duration-300"></div>
-                </button>
-              </form>
-            </div>
-
-            {/* Right Column - Photo Gallery */}
-            <div className="lg:col-span-1">
-              {filePreviews.length > 0 ? (
-                <div className="space-y-4 sticky top-24">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-medium text-white">Selected Photos</h2>
-                    <span className="text-gray-500 text-sm">{files.length} / 36</span>
-                  </div>
-                  <div className="grid grid-cols-3 lg:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto pr-2">
-                    {filePreviews.map((preview, index) => (
-                      <div
-                        key={index}
-                        className="group relative aspect-square rounded-lg overflow-hidden bg-gray-800 border border-gray-700/50 hover:border-gray-600 transition-all"
-                      >
-                        <img
-                          src={preview}
-                          alt={`Preview ${index + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeFile(index)}
-                          className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                        >
-                          <svg
-                            className="w-5 h-5 text-white"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M6 18L18 6M6 6l12 12"
-                            />
-                          </svg>
-                        </button>
-                        <div className="absolute top-1.5 left-1.5 bg-black/80 text-white text-xs px-1.5 py-0.5 rounded font-medium">
-                          {index + 1}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700/30 rounded-lg p-8 text-center space-y-3">
-                  <div className="text-4xl mb-2">📸</div>
-                  <p className="text-gray-400 text-sm">Your selected photos will appear here</p>
-                  <p className="text-gray-500 text-xs">Upload 6-36 photos to get started</p>
-                </div>
+                  Add More Photos
+                </label>
               )}
             </div>
+            {files.length > 0 && (
+              <p className="mt-2 text-gray-500 text-sm">
+                {files.length} photo{files.length !== 1 ? "s" : ""} selected
+              </p>
+            )}
           </div>
-        </div>
+          
+          {/* Prompt/Storytelling Context */}
+          <div>
+            <label className="block text-gray-300 text-sm font-medium mb-2">
+              Storytelling Context <span className="text-gray-500 font-normal">(Optional)</span>
+            </label>
+            <textarea
+              value={promptText}
+              onChange={(e) => setPromptText(e.target.value)}
+              placeholder="Describe the story or mood you want to capture... (e.g., &quot;A quiet weekend getaway with friends&quot;, &quot;Celebrating graduation with family&quot;)"
+              rows={3}
+              className="w-full px-4 py-3 bg-gray-800 border border-gray-700 text-white rounded-sm focus:outline-none focus:border-gray-600 resize-none placeholder:text-gray-600"
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Help the AI understand the context to create a better storytelling order
+            </p>
+          </div>
+
+          {/* Image Preview Gallery */}
+          {filePreviews.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-medium text-white">Selected Photos</h2>
+                <div className="flex items-center space-x-4 text-sm text-gray-400">
+                  {uploadStatus && (
+                    <>
+                      <span>Selected: {uploadStatus.selected}</span>
+                      <span>Uploaded: {uploadStatus.uploaded}</span>
+                      {uploadStatus.used > 0 && <span>Used in render: {uploadStatus.used}</span>}
+                    </>
+                  )}
+                  <span>{files.length} / 36</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
+                {filePreviews.map((preview, index) => (
+                  <div
+                    key={index}
+                    className="group relative aspect-square rounded-lg overflow-hidden bg-gray-800 border border-gray-700 hover:border-gray-600 transition-all"
+                  >
+                    <img
+                      src={preview}
+                      alt={`Preview ${index + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeFile(index)}
+                      className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                    >
+                      <svg
+                        className="w-6 h-6 text-white"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      </svg>
+                    </button>
+                    <div className="absolute top-1 left-1 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
+                      {index + 1}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-gray-300 text-sm font-medium mb-2">
+                Aspect Ratio
+              </label>
+              <select
+                value={outputRatio}
+                onChange={(e) => setOutputRatio(e.target.value)}
+                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 text-white rounded-sm focus:outline-none focus:border-gray-600"
+              >
+                <option value="16:9" className="bg-gray-800">16:9 (HD)</option>
+                <option value="2.39:1" className="bg-gray-800">2.39:1 (Film Wide)</option>
+                <option value="1:1" className="bg-gray-800">1:1 (Square)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-gray-300 text-sm font-medium mb-2">
+                Frame Rate
+              </label>
+              <select
+                value={fps}
+                onChange={(e) => setFps(Number(e.target.value))}
+                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 text-white rounded-sm focus:outline-none focus:border-gray-600"
+              >
+                <option value={24} className="bg-gray-800">24 fps (Cinematic)</option>
+                <option value={30} className="bg-gray-800">30 fps (Smooth)</option>
+              </select>
+            </div>
+          </div>
+
+          {progress && (
+            <div className="space-y-2">
+              <div className="w-full bg-gray-800 rounded-full h-2.5 dark:bg-gray-700">
+                <div
+                  className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                  style={{ width: `${Math.min(100, Math.max(0, progress.percent))}%` }}
+                ></div>
+              </div>
+              <p className="text-sm text-gray-400">
+                {progress.step}: {progress.detail} ({progress.percent.toFixed(1)}%)
+              </p>
+            </div>
+          )}
+
+          {error && (
+            <div className="p-4 bg-red-900/20 border border-red-800 text-red-300 rounded-sm text-sm">
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading || files.length < 6}
+            className="w-full group relative px-12 py-4 bg-white text-black text-sm font-medium tracking-wide rounded-sm hover:bg-gray-100 transition-all duration-300 disabled:bg-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed"
+          >
+            {loading ? "Creating Memory..." : "Create Memory"}
+            <div className="absolute inset-0 rounded-sm ring-1 ring-white/20 group-hover:ring-white/40 transition-all duration-300"></div>
+          </button>
+        </form>
       </div>
     </div>
   );
