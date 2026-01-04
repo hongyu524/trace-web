@@ -25,13 +25,13 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
       // Append new files to existing ones
       const updatedFiles = [...files, ...fileArray];
       
-      // Limit to 36 photos max
-      const finalFiles = updatedFiles.slice(0, 36);
+      // Limit to 24 photos max
+      const finalFiles = updatedFiles.slice(0, 24);
       setFiles(finalFiles);
       
       // Generate preview URLs for new files only
-      const newPreviews = fileArray.slice(0, 36 - files.length).map(file => URL.createObjectURL(file));
-      setFilePreviews([...filePreviews, ...newPreviews].slice(0, 36));
+      const newPreviews = fileArray.slice(0, 24 - files.length).map(file => URL.createObjectURL(file));
+      setFilePreviews([...filePreviews, ...newPreviews].slice(0, 24));
       
       // Reset the input so same files can be selected again if needed
       e.target.value = '';
@@ -53,7 +53,7 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (files.length < 6) {
-      setError("Please upload at least 6 photos (maximum 36)");
+      setError("Please upload at least 6 photos (maximum 24)");
       return;
     }
 
@@ -312,7 +312,7 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
               >
                 Choose Files
               </label>
-              {files.length > 0 && files.length < 36 && (
+              {files.length > 0 && files.length < 24 && (
                 <label
                   htmlFor="file-input"
                   className="cursor-pointer px-4 py-2 bg-gray-700 border border-gray-600 text-white rounded-sm hover:bg-gray-600 transition-colors"
@@ -358,7 +358,7 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
                       {uploadStatus.used > 0 && <span>Used in render: {uploadStatus.used}</span>}
                     </>
                   )}
-                  <span>{files.length} / 36</span>
+                  <span>{files.length} / 24</span>
                 </div>
               </div>
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">

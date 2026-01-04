@@ -70,7 +70,7 @@ export default function LandingPage({ onStart, onNavigate }: LandingPageProps) {
             <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700/30 rounded-lg p-8 hover:border-cyan-500/50 transition-all duration-300">
               <div className="text-cyan-400 text-3xl mb-4">⚡</div>
               <h3 className="text-white font-medium mb-3 text-lg">Fast & Simple</h3>
-              <p className="text-gray-400 text-sm leading-relaxed">Upload 6-36 photos and get your memory in minutes</p>
+              <p className="text-gray-400 text-sm leading-relaxed">Upload 6-24 photos and get your memory in minutes</p>
             </div>
           </div>
 
@@ -83,7 +83,7 @@ export default function LandingPage({ onStart, onNavigate }: LandingPageProps) {
                   <span className="text-2xl font-bold text-cyan-400">1</span>
                 </div>
                 <h3 className="text-white font-medium text-lg">Upload Photos</h3>
-                <p className="text-gray-400 text-sm leading-relaxed">Select 6-36 of your favorite photos. We support all common formats.</p>
+                <p className="text-gray-400 text-sm leading-relaxed">Select 6-24 of your favorite photos. We support all common formats.</p>
               </div>
               
               <div className="text-center space-y-4">

@@ -83,7 +83,7 @@ console.log(`[SERVER]   NODE_ENV: ${process.env.NODE_ENV || 'not set'}`);
 
 // Constants
 const MIN_PHOTOS = 6;
-const MAX_PHOTOS = 36;
+const MAX_PHOTOS = 24;
 
 // AWS S3 Configuration
 const AWS_REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-2';

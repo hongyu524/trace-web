@@ -1550,43 +1550,8 @@ async function createMemoryRenderOnly(req, res) {
     const finalStat = await fsp.stat(finalMp4);
     console.log(`[CREATE_MEMORY] Final video size=${finalStat.size} bytes`);
 
-    // End cap: Temporarily disabled for reliability
-    // Check env gate: if TRACE_ENDCAP === '0' OR TRACE_ENDCAP_DISABLED === '1' → skip end cap
-    const endCapDisabled = process.env.TRACE_ENDCAP === '0' || process.env.TRACE_ENDCAP_DISABLED === '1';
-    const enableEndCap = !endCapDisabled;
-    
-    console.log('[ENDCAP] enabled=', enableEndCap, 'TRACE_ENDCAP=', process.env.TRACE_ENDCAP, 'TRACE_ENDCAP_DISABLED=', process.env.TRACE_ENDCAP_DISABLED);
-    
-    let endCapEnabled = false;
-    if (enableEndCap) {
-      const endCapStartTime = Date.now();
-      console.log(`[PIPE] stage=append_endcap start jobId=${jobId}`);
-      progressStore.set(jobId, { percent: 97, step: 'rendering', detail: 'Adding end card...' });
-      try {
-        const endCapMp4 = path.join(outDir, 'final_with_endcap.mp4');
-        console.log('[ENDCAP] Starting end cap append...');
-        await appendEndCap(finalMp4, endCapMp4);
-        console.log('[ENDCAP] End cap appended successfully');
-        // Replace finalMp4 with end cap version
-        await fsp.rename(endCapMp4, finalMp4);
-        const endCapStat = await fsp.stat(finalMp4);
-        console.log(`[ENDCAP] Final video with end cap size=${endCapStat.size} bytes`);
-        progressStore.set(jobId, { percent: 98, step: 'rendering', detail: 'End card added...' });
-        endCapEnabled = true;
-        const endCapElapsed = Date.now() - endCapStartTime;
-        console.log(`[PIPE] stage=append_endcap done ms=${endCapElapsed} jobId=${jobId}`);
-      } catch (endCapError) {
-        const endCapElapsed = Date.now() - endCapStartTime;
-        console.error(`[PIPE] stage=append_endcap fail ms=${endCapElapsed} jobId=${jobId} error=${endCapError.message}`);
-        console.error('[ENDCAP] Failed to append end cap:', endCapError.message);
-        console.error('[ENDCAP] Falling back to original video (no end cap)');
-        // Continue with original finalMp4 (no end cap)
-        endCapEnabled = false;
-      }
-    } else {
-      console.log('[ENDCAP] End cap disabled (premium user opted out or admin override)');
-      endCapEnabled = false;
-    }
+    // End cap removed completely - was causing issues and pausing at 95%
+    console.log('[ENDCAP] End cap completely removed from pipeline');
 
     // Upload to published
     progressStore.set(jobId, { percent: 99, step: 'rendering', detail: 'Uploading final video...' });
