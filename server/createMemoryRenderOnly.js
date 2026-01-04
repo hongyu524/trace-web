@@ -252,6 +252,48 @@ async function getVideoDuration(videoPath) {
   }
 }
 
+async function ffprobeDurationSeconds(filePath) {
+  const ffprobe = pickFfprobePath();
+  const args = [
+    '-v', 'error',
+    '-show_entries', 'format=duration',
+    '-of', 'default=noprint_wrappers=1:nokey=1',
+    filePath
+  ];
+  const { stdout } = await run(ffprobe, args);
+  const v = parseFloat(String(stdout).trim());
+  return Number.isFinite(v) ? v : 0;
+}
+
+async function ensureMinDurationMp4(filePath, minSeconds, { tolerance = 0.08 } = {}) {
+  const actual = await ffprobeDurationSeconds(filePath);
+  if (actual >= (minSeconds - tolerance)) return { padded: false, actual };
+
+  const delta = Math.max(0, minSeconds - actual);
+  const dir = path.dirname(filePath);
+  const base = path.basename(filePath, path.extname(filePath));
+  const tmp = path.join(dir, `${base}.padtmp.mp4`);
+
+  // Clone last frame for `delta` seconds
+  const ffmpeg = pickFfmpegPath();
+  const args = [
+    '-y',
+    '-i', filePath,
+    '-vf', `tpad=stop_mode=clone:stop_duration=${delta.toFixed(3)}`,
+    '-c:v', 'libx264',
+    '-pix_fmt', 'yuv420p',
+    '-movflags', '+faststart',
+    '-an',
+    tmp
+  ];
+
+  await run(ffmpeg, args, { logPrefix: '[FFMPEG_PAD]' });
+
+  await fsp.rename(tmp, filePath);
+  const after = await ffprobeDurationSeconds(filePath);
+  return { padded: true, before: actual, after, delta };
+}
+
 async function applyFades(inputVideoPath, outputPath, duration) {
   const ffmpeg = pickFfmpegPath();
   const fadeIn = 0.6;
@@ -776,7 +818,7 @@ async function createMemoryRenderOnly(req, res) {
     console.log(`[CREATE_MEMORY] ffmpeg done size=${silentStat.size} bytes`);
 
     // Get video duration for fades and music muxing
-    const videoDuration = await getVideoDuration(silentMp4);
+    let videoDuration = await getVideoDuration(silentMp4);
     console.log(`[VIDEO] Silent video duration=${videoDuration.toFixed(2)}s`);
     
     // Validate output with ffprobe
@@ -797,8 +839,15 @@ async function createMemoryRenderOnly(req, res) {
       offsets.push((i + 1) * outputHold + i * outputXfade);
     }
     
-    // Fail if duration is too short
-    if (videoDuration < expectedMinDuration) {
+    // Ensure minimum duration by padding if needed
+    const padResult = await ensureMinDurationMp4(silentMp4, expectedMinDuration);
+    console.log('[DURATION_GUARD]', { minDurationSeconds: expectedMinDuration, ...padResult });
+    
+    // Re-check duration after padding
+    videoDuration = await getVideoDuration(silentMp4);
+    
+    // Fail if duration is too short (with small tolerance for ffprobe rounding)
+    if (videoDuration < expectedMinDuration - 0.15) {
       console.error(`[CREATE_MEMORY] OUTPUT_VALIDATION_FAILED: videoDuration=${videoDuration.toFixed(2)}s < expectedMin=${expectedMinDuration.toFixed(2)}s for N=${outputN}`);
       console.error(`[CREATE_MEMORY] DURATION_TOO_SHORT: actual=${videoDuration.toFixed(2)}s target=${outputTargetDuration.toFixed(2)}s expectedTotal=${expectedTotalSeconds.toFixed(2)}s hold=${outputHold.toFixed(2)}s xfade=${outputXfade}s`);
       console.error(`[CREATE_MEMORY] offsets=[${offsets.map(o => o.toFixed(2)).join(',')}] inputCount=${outputN}`);
