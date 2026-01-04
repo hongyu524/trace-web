@@ -4,22 +4,25 @@ interface PricingPageProps {
 
 export default function PricingPage({ onBack }: PricingPageProps) {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-black via-gray-900 to-black">
-      <div className="max-w-6xl mx-auto px-6 py-16">
-        <button
-          onClick={onBack}
-          className="mb-8 text-gray-400 hover:text-white transition-colors flex items-center space-x-2"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          <span>Back</span>
-        </button>
+    <div className="h-screen flex flex-col bg-gradient-to-b from-black via-gray-900 to-black overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-6xl mx-auto px-6 py-8">
+          <div className="flex items-start justify-between mb-8">
+            <button
+              onClick={onBack}
+              className="text-gray-400 hover:text-white transition-colors flex items-center space-x-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              <span>Back</span>
+            </button>
+          </div>
 
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-white mb-4">Pricing</h1>
-          <p className="text-gray-400 text-lg">Start for free. Upgrade as you go.</p>
-        </div>
+          <div className="text-center mb-12">
+            <h1 className="text-4xl font-bold text-white mb-4">Pricing</h1>
+            <p className="text-gray-400 text-lg">Start for free. Upgrade as you go.</p>
+          </div>
 
         <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
           {/* Free Plan */}
@@ -123,6 +126,7 @@ export default function PricingPage({ onBack }: PricingPageProps) {
             Each memory is computationally generated. Free plans are limited to ensure quality and sustainability.
           </p>
         </div>
+      </div>
       </div>
     </div>
   );
