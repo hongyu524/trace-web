@@ -832,18 +832,21 @@ function buildZoompanExpr({ startScale, endScale, driftX, driftY, frames, W, H }
   const endHeadroomX = (endScale - 1) * W / 2;
   const endHeadroomY = (endScale - 1) * H / 2;
 
-  // Interpolate scale linearly over frames
-  const scaleExpr = `${startScale} + (${endScale} - ${startScale}) * on / (${frames} - 1)`;
+  // Use easeInOutSine easing for smooth motion: ease = (1 - cos(PI * t)) / 2
+  // where t = on / (N - 1)
+  const nMinus1 = frames - 1;
+  const easeExpr = `(1 - cos(PI * on / ${nMinus1})) / 2`;
 
-  // Interpolate pan position (center + drift * headroom * progress)
-  // Start at center: (iw - ow) / 2, then add drift offset
-  const panProgress = `on / (${frames} - 1)`;
-  const headroomXExpr = `(${startHeadroomX} + (${endHeadroomX} - ${startHeadroomX}) * ${panProgress})`;
-  const headroomYExpr = `(${startHeadroomY} + (${endHeadroomY} - ${startHeadroomY}) * ${panProgress})`;
+  // Interpolate scale with ease (smooth eased zoom)
+  const scaleExpr = `${startScale} + (${endScale} - ${startScale}) * ${easeExpr}`;
+
+  // Calculate headroom with ease (interpolated headroom)
+  const headroomXExpr = `${startHeadroomX} + (${endHeadroomX} - ${startHeadroomX}) * ${easeExpr}`;
+  const headroomYExpr = `${startHeadroomY} + (${endHeadroomY} - ${startHeadroomY}) * ${easeExpr}`;
   
-  // Pan X: center + driftX * headroom
-  const panXExpr = `(iw - ow) / 2 + ${driftX} * ${headroomXExpr} * ${panProgress}`;
-  const panYExpr = `(ih - oh) / 2 + ${driftY} * ${headroomYExpr} * ${panProgress}`;
+  // Pan X: center + driftX * headroom * ease (smooth eased pan)
+  const panXExpr = `(iw - ow) / 2 + ${driftX} * ${headroomXExpr} * ${easeExpr}`;
+  const panYExpr = `(ih - oh) / 2 + ${driftY} * ${headroomYExpr} * ${easeExpr}`;
 
   // Build zoompan filter
   // zoompan=z='scale_expr':x='panX_expr':y='panY_expr':d=frames
@@ -891,10 +894,10 @@ async function renderSlideshow({
   // N = number of images, xf = crossfade duration
   // xfade overlap model: totalDuration = N * hold + xf
   const N = frameCount;
-  const xf = 0.35; // Crossfade duration in seconds
+  const xf = 0.4; // Crossfade duration in seconds (increased from 0.35s for smoother transitions)
   const targetDuration = Math.max(12, Math.min(30, N * 1.7)); // 9 images -> 15.3s
   // Correct formula: hold = (targetDuration - xf) / N
-  const hold = Math.max(0.9, (targetDuration - xf) / N);
+  const hold = Math.max(1.0, (targetDuration - xf) / N); // Increased min hold to 1.0s for better dissolve support
   const clipDur = hold + xf; // Each clip includes overlap room for xfade
   
   // Calculate cumulative offsets for xfade transitions
@@ -960,6 +963,10 @@ async function renderSlideshow({
   
   // Calculate frames per segment (must match exactly for correct duration)
   const segmentFrames = Math.round(clipDur * fps);
+  const xfadeFrames = Math.round(xf * fps);
+  
+  // Log per-segment timing for verification
+  console.log(`[PLAN] clipDur=${clipDur.toFixed(3)}s segmentFrames=${segmentFrames} xfadeFrames=${xfadeFrames} hold=${hold.toFixed(3)}s xfade=${xf.toFixed(3)}s`);
   
   // Process each input image: apply motion via zoompan, then format
   for (let i = 0; i < N; i++) {
@@ -1429,9 +1436,9 @@ async function createMemoryRenderOnly(req, res) {
     const outputN = orderedKeys.length;
     
     // Use centralized duration calculation (defined in renderSlideshow, but recalculate here for validation)
-    const outputXf = 0.35;
+    const outputXf = 0.4; // Match renderSlideshow xfade duration
     const outputTargetDuration = Math.max(12, Math.min(30, outputN * 1.7));
-    const outputHold = Math.max(0.9, (outputTargetDuration - outputXf) / outputN);
+    const outputHold = Math.max(1.0, (outputTargetDuration - outputXf) / outputN); // Match renderSlideshow min hold
     const expectedTotalSeconds = outputN * outputHold + outputXf;
     const expectedMinDuration = expectedTotalSeconds - 0.5;
     
