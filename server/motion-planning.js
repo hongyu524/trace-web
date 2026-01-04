@@ -244,8 +244,9 @@ function generateDocumentaryMotionPlan(analysisResults, sequencePlan, outputWidt
     );
   }
   
-  // Log distribution statistics
+  // Log distribution statistics and pack usage
   const presetCounts = {};
+  let maxScaleUsed = 1.0;
   motionPlan.forEach(m => {
     const p = m.preset || m.movementType.toUpperCase();
     presetCounts[p] = (presetCounts[p] || 0) + 1;
