@@ -1043,8 +1043,33 @@ async function createMemoryRenderOnly(req, res) {
     const finalStat = await fsp.stat(finalMp4);
     console.log(`[CREATE_MEMORY] Final video size=${finalStat.size} bytes`);
 
-    // Apply end cap if enabled (default ON)
-    const enableEndCap = process.env.TRACE_ENDCAP !== '0';
+    // End cap policy enforcement (server-side, authoritative)
+    // Free users: FORCED ON (no override)
+    // Premium users: OPTIONAL (can disable via endCap: false)
+    const userPlan = req.body?.plan || 'free'; // Default to 'free' if not specified
+    const isPremium = userPlan === 'premium';
+    const requestedEndCap = req.body?.endCap; // true, false, or undefined
+    
+    // Determine if end cap should be enabled
+    let enableEndCap;
+    if (process.env.TRACE_ENDCAP === '0') {
+      // Admin/debug override: disable for all (unless explicitly enabled for premium)
+      enableEndCap = false;
+      console.log('[ENDCAP] Admin override: TRACE_ENDCAP=0 (disabled for all)');
+    } else if (isPremium) {
+      // Premium users: end cap ON unless explicitly disabled
+      enableEndCap = requestedEndCap !== false;
+      console.log(`[ENDCAP] Premium user: endCap=${enableEndCap} (requested=${requestedEndCap})`);
+    } else {
+      // Free users: FORCED ON (ignore any endCap: false from frontend)
+      enableEndCap = true;
+      if (requestedEndCap === false) {
+        console.log('[ENDCAP] Free user attempted to disable end cap - ignoring (FORCED ON)');
+      } else {
+        console.log('[ENDCAP] Free user: end cap FORCED ON (no override allowed)');
+      }
+    }
+    
     if (enableEndCap) {
       try {
         const endCapMp4 = path.join(outDir, 'final_with_endcap.mp4');
@@ -1061,7 +1086,7 @@ async function createMemoryRenderOnly(req, res) {
         // Continue with original finalMp4 (no end cap)
       }
     } else {
-      console.log('[ENDCAP] End cap disabled via TRACE_ENDCAP=0');
+      console.log('[ENDCAP] End cap disabled (premium user opted out or admin override)');
     }
 
     // Upload to published
