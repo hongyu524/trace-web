@@ -17,6 +17,7 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ percent: number; step: string; detail: string } | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<{ selected: number; uploaded: number; used: number } | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -73,6 +74,9 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
 
       const photoKeys: string[] = [];
       const totalFiles = files.length;
+      
+      // Track upload status
+      setUploadStatus({ selected: totalFiles, uploaded: 0, used: 0 });
 
       // Upload each file to S3
       for (let i = 0; i < files.length; i++) {
@@ -98,6 +102,7 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
           await uploadFileToS3(file, presignResponse.url);
           
           photoKeys.push(presignResponse.key);
+          setUploadStatus({ selected: totalFiles, uploaded: photoKeys.length, used: 0 });
           console.log(`[UploadFlow] Uploaded ${i + 1}/${totalFiles}: ${presignResponse.key}`);
         } catch (uploadError: any) {
           console.error(`[UploadFlow] Upload failed for file ${i + 1}:`, uploadError.message);
@@ -146,6 +151,7 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
       // Update UI state to reflect ordered sequence
       setFiles(orderedFiles);
       setFilePreviews(orderedPreviews);
+      setUploadStatus({ selected: totalFiles, uploaded: photoKeys.length, used: orderedKeys.length });
       
       console.log('[UploadFlow] Applied order to photoKeys and UI');
       console.log('[UploadFlow] orderedKeys.length =', orderedKeys.length);
@@ -339,7 +345,16 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-medium text-white">Selected Photos</h2>
-                <span className="text-sm text-gray-400">{files.length} / 36</span>
+                <div className="flex items-center space-x-4 text-sm text-gray-400">
+                  {uploadStatus && (
+                    <>
+                      <span>Selected: {uploadStatus.selected}</span>
+                      <span>Uploaded: {uploadStatus.uploaded}</span>
+                      {uploadStatus.used > 0 && <span>Used in render: {uploadStatus.used}</span>}
+                    </>
+                  )}
+                  <span>{files.length} / 36</span>
+                </div>
               </div>
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
                 {filePreviews.map((preview, index) => (

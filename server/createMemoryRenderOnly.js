@@ -457,8 +457,20 @@ async function appendEndCap(inputMp4Path, outputMp4Path) {
   const ffmpeg = pickFfmpegPath();
   const logoPath = findLogoPath();
   
+  // Fail-loud logging for debugging
+  console.log('[ENDCAP] logoPath=', logoPath);
+  console.log('[ENDCAP] logoPath exists=', logoPath ? fs.existsSync(logoPath) : false);
+  
   if (!logoPath) {
-    throw new Error('TRACE logo not found in assets directory');
+    const error = new Error('TRACE logo not found in assets directory');
+    console.error('[ENDCAP] FATAL: Logo not found');
+    throw error;
+  }
+  
+  if (!fs.existsSync(logoPath)) {
+    const error = new Error(`TRACE logo path exists but file not found: ${logoPath}`);
+    console.error('[ENDCAP] FATAL: Logo file does not exist at path');
+    throw error;
   }
   
   // Get video dimensions and duration
@@ -534,11 +546,28 @@ async function appendEndCap(inputMp4Path, outputMp4Path) {
   
   console.log('[ENDCAP] Appending end cap: freeze=0.75s fade=1.0s black_hold=1.25s logo_overlay total=' + endCapDuration + 's');
   console.log('[ENDCAP] FFmpeg command:', ffmpeg, args.join(' '));
-  await run(ffmpeg, args, { env: process.env });
+  console.log('[ENDCAP] Output path:', outputMp4Path);
   
-  // Log success and verify output duration
-  const outputDuration = await ffprobeDurationSeconds(outputMp4Path);
-  console.log('[ENDCAP] Success! Output duration=', outputDuration.toFixed(2), 's (input was', videoDuration.toFixed(2), 's, endcap adds', endCapDuration.toFixed(2), 's)');
+  try {
+    await run(ffmpeg, args, { env: process.env });
+    
+    // Log success and verify output duration
+    const outputDuration = await ffprobeDurationSeconds(outputMp4Path);
+    console.log('[ENDCAP] Success! Output duration=', outputDuration.toFixed(2), 's (input was', videoDuration.toFixed(2), 's, endcap adds', endCapDuration.toFixed(2), 's)');
+  } catch (endCapErr) {
+    // Fail-loud logging
+    console.error('[ENDCAP] FFmpeg command failed');
+    console.error('[ENDCAP] stderr tail:', endCapErr.stderr?.slice(-500) || endCapErr.message);
+    console.error('[ENDCAP] Full error:', endCapErr);
+    
+    // Strict mode: fail loud if enabled
+    if (process.env.TRACE_ENDCAP_STRICT === '1') {
+      throw new Error(`End cap failed in strict mode: ${endCapErr.message}`);
+    }
+    
+    // Otherwise, re-throw to be caught by caller
+    throw endCapErr;
+  }
 }
 
 async function muxAudioVideo(videoPath, audioPath, outputPath, videoDuration) {
