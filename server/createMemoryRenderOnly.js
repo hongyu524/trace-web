@@ -600,15 +600,56 @@ async function muxAudioVideo(videoPath, audioPath, outputPath, videoDuration) {
   return result;
 }
 
+/**
+ * Build FFmpeg zoompan expression for motion
+ * @param {Object} params
+ * @param {number} params.startScale - Starting scale
+ * @param {number} params.endScale - Ending scale
+ * @param {number} params.driftX - Normalized drift X (-1..1)
+ * @param {number} params.driftY - Normalized drift Y (-1..1)
+ * @param {number} params.frames - Number of output frames
+ * @param {number} params.W - Output width
+ * @param {number} params.H - Output height
+ * @returns {string} FFmpeg zoompan filter string
+ */
+function buildZoompanExpr({ startScale, endScale, driftX, driftY, frames, W, H }) {
+  // Calculate headroom from zoom (available pan space)
+  // headroom = (scale - 1) * dimension / 2
+  const startHeadroomX = (startScale - 1) * W / 2;
+  const startHeadroomY = (startScale - 1) * H / 2;
+  const endHeadroomX = (endScale - 1) * W / 2;
+  const endHeadroomY = (endScale - 1) * H / 2;
+
+  // Interpolate scale linearly over frames
+  const scaleExpr = `${startScale} + (${endScale} - ${startScale}) * on / (${frames} - 1)`;
+
+  // Interpolate pan position (center + drift * headroom * progress)
+  // Start at center: (iw - ow) / 2, then add drift offset
+  const panProgress = `on / (${frames} - 1)`;
+  const headroomXExpr = `(${startHeadroomX} + (${endHeadroomX} - ${startHeadroomX}) * ${panProgress})`;
+  const headroomYExpr = `(${startHeadroomY} + (${endHeadroomY} - ${startHeadroomY}) * ${panProgress})`;
+  
+  // Pan X: center + driftX * headroom
+  const panXExpr = `(iw - ow) / 2 + ${driftX} * ${headroomXExpr} * ${panProgress}`;
+  const panYExpr = `(ih - oh) / 2 + ${driftY} * ${headroomYExpr} * ${panProgress}`;
+
+  // Build zoompan filter
+  // zoompan=z='scale_expr':x='panX_expr':y='panY_expr':d=frames
+  return `zoompan=z='${scaleExpr}':x='${panXExpr}':y='${panYExpr}':d=${frames}`;
+}
+
 // Generates a cinematic slideshow video with xfade transitions
 // - scales/crops to target dimensions based on aspect ratio
 // - uses cumulative xfade offsets to ensure correct timeline duration
+// - applies Phase 1 motion (Ken Burns) per segment
 async function renderSlideshow({
   framesDir,
   frameCount,
   outPath,
   fps = 24,
   aspectRatio = '16:9',
+  motionPack = 'default',
+  motionSeed = null,
 }) {
   const ffmpeg = pickFfmpegPath();
 
@@ -679,13 +720,70 @@ async function renderSlideshow({
     inputArgs.push('-i', imagePath);
   }
 
-  // Build filtergraph: process each image, then chain xfade transitions
+  // Generate Phase 1 motion specs
+  const { generatePhase1Motions } = await import('./motion-phase1.js');
+  const motions = generatePhase1Motions({
+    count: N,
+    pack: motionPack,
+    aspectRatio,
+    fps,
+    seed: motionSeed,
+  });
+
+  // Log motion summary
+  const motionCounts = {};
+  let maxScaleUsed = 1.0;
+  let movedCount = 0;
+  motions.forEach((m, idx) => {
+    motionCounts[m.type] = (motionCounts[m.type] || 0) + 1;
+    maxScaleUsed = Math.max(maxScaleUsed, m.startScale, m.endScale);
+    if (m.startScale !== 1.0 || m.endScale !== 1.0 || Math.abs(m.driftX) > 0.001 || Math.abs(m.driftY) > 0.001) {
+      movedCount++;
+    }
+  });
+  console.log(`[MOTION-PHASE1] pack=${motionPack} counts=${JSON.stringify(motionCounts)} maxScale=${maxScaleUsed.toFixed(3)} movedFrames=${movedCount}/${N}`);
+
+  // Build filtergraph: process each image with motion, then chain xfade transitions
   const filterParts = [];
   
-  // Process each input image: loop, trim, scale, crop, fps, format
-  const baseFilter = `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=${fps},format=yuv420p`;
+  // Calculate frames per segment (must match exactly for correct duration)
+  const segmentFrames = Math.round(clipDur * fps);
+  
+  // Process each input image: apply motion via zoompan, then format
   for (let i = 0; i < N; i++) {
-    filterParts.push(`[${i}:v]loop=loop=-1:size=1:start=0,trim=duration=${clipDur},setpts=PTS-STARTPTS,${baseFilter}[img${i}]`);
+    const motion = motions[i];
+    
+    // Scale source to base size (larger than output to allow zoom)
+    // Use output dimensions * maxScale to ensure we have headroom
+    const baseScale = Math.max(motion.startScale, motion.endScale, 1.05);
+    const baseWidth = Math.round(width * baseScale);
+    const baseHeight = Math.round(height * baseScale);
+    
+    // Build zoompan expression
+    const zoompanExpr = buildZoompanExpr({
+      startScale: motion.startScale,
+      endScale: motion.endScale,
+      driftX: motion.driftX,
+      driftY: motion.driftY,
+      frames: segmentFrames,
+      W: width,
+      H: height,
+    });
+    
+    // Log segment motion (sample a few)
+    if (i < 3 || i >= N - 1) {
+      console.log(`[MOTION-PHASE1] seg#${i} type=${motion.type} scale ${motion.startScale.toFixed(2)}→${motion.endScale.toFixed(2)} driftX=${motion.driftX.toFixed(3)} driftY=${motion.driftY.toFixed(3)} duration=${clipDur.toFixed(2)}s`);
+    }
+    
+    // Process image: scale to base, apply zoompan motion, crop to output, set fps and format
+    // Note: zoompan outputs exactly 'd' frames, so we don't need loop/trim
+    filterParts.push(
+      `[${i}:v]scale=${baseWidth}:${baseHeight}:force_original_aspect_ratio=increase,` +
+      `${zoompanExpr},` +
+      `scale=${width}:${height},` +
+      `fps=${fps},` +
+      `format=yuv420p[img${i}]`
+    );
   }
   
   // Chain xfade transitions with cumulative offsets
