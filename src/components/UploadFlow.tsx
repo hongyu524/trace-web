@@ -162,12 +162,13 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
       console.log('[CREATE_MEMORY] requestBody.order.length =', requestBody.order.length);
       console.log('[CREATE_MEMORY] ========================================');
       console.log(`[UploadFlow] Calling Railway: ${API_BASE}/api/create-memory`);
+      
+      // Show gradual progress while rendering (time-based estimates)
+      const startTime = Date.now();
+      const estimatedRenderTime = 45000; // 45 seconds estimate
+      let progressInterval: NodeJS.Timeout | null = null;
+      
       try {
-        // Show gradual progress while rendering (time-based estimates)
-        const startTime = Date.now();
-        const estimatedRenderTime = 45000; // 45 seconds estimate
-        let progressInterval: NodeJS.Timeout | null = null;
-        
         progressInterval = setInterval(() => {
           const elapsed = Date.now() - startTime;
           const progressPercent = Math.min(95, 50 + (elapsed / estimatedRenderTime) * 45); // 50% to 95%
@@ -186,6 +187,7 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
         
         if (progressInterval) {
           clearInterval(progressInterval);
+          progressInterval = null;
         }
 
         if (!result.ok || !result.playbackUrl) {
