@@ -411,7 +411,6 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
                 className="w-full px-4 py-2 bg-gray-800 border border-gray-700 text-white rounded-sm focus:outline-none focus:border-gray-600"
               >
                 <option value="16:9" className="bg-gray-800">16:9 (HD)</option>
-                <option value="2.39:1" className="bg-gray-800">2.39:1 (Film Wide)</option>
                 <option value="1:1" className="bg-gray-800">1:1 (Square)</option>
               </select>
             </div>
