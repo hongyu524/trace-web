@@ -176,19 +176,59 @@ async function uploadFileToS3(bucket, key, filePath, contentType) {
 }
 
 function run(cmd, args, opts = {}) {
+  const timeoutMs = opts.timeout || 240000; // Default 4 minutes, can be overridden
+  const stage = opts.stage || 'unknown';
+  
   return new Promise((resolve, reject) => {
+    const startTime = Date.now();
     const p = spawn(cmd, args, { ...opts, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
-    p.stdout.on('data', (d) => (stdout += d.toString()));
-    p.stderr.on('data', (d) => (stderr += d.toString()));
-    p.on('error', reject);
-    p.on('close', (code) => {
-      if (code === 0) return resolve({ stdout, stderr });
-      const err = new Error(`Command failed (${code}): ${cmd} ${args.join(' ')}`);
-      err.code = code;
+    
+    // Timeout handler
+    const timeoutId = setTimeout(() => {
+      const elapsed = Date.now() - startTime;
+      console.error(`[PIPE] stage=${stage} timeout ms=${elapsed} cmd=${cmd}`);
+      p.kill('SIGTERM');
+      // Force kill after 5 seconds if still running
+      setTimeout(() => {
+        try {
+          p.kill('SIGKILL');
+        } catch (e) {
+          // Process already dead
+        }
+      }, 5000);
+      const err = new Error(`Command timed out after ${timeoutMs}ms: ${cmd} ${args.join(' ')}`);
+      err.code = 'TIMEOUT';
+      err.stage = stage;
       err.stdout = stdout;
       err.stderr = stderr;
+      err.elapsed = elapsed;
+      reject(err);
+    }, timeoutMs);
+    
+    p.stdout.on('data', (d) => (stdout += d.toString()));
+    p.stderr.on('data', (d) => (stderr += d.toString()));
+    p.on('error', (err) => {
+      clearTimeout(timeoutId);
+      reject(err);
+    });
+    p.on('close', (code, signal) => {
+      clearTimeout(timeoutId);
+      const elapsed = Date.now() - startTime;
+      if (code === 0) {
+        console.log(`[PIPE] stage=${stage} done ms=${elapsed}`);
+        return resolve({ stdout, stderr });
+      }
+      const err = new Error(`Command failed (${code}${signal ? `, signal=${signal}` : ''}): ${cmd} ${args.join(' ')}`);
+      err.code = code;
+      err.signal = signal;
+      err.stdout = stdout;
+      err.stderr = stderr;
+      err.stage = stage;
+      err.elapsed = elapsed;
+      const stderrTail = stderr.slice(-500);
+      console.error(`[PIPE] stage=${stage} fail ms=${elapsed} code=${code} signal=${signal || 'none'} stderrTail=${stderrTail}`);
       reject(err);
     });
   });
@@ -581,12 +621,16 @@ async function muxAudioVideo(videoPath, audioPath, outputPath, videoDuration) {
   // Audio filter: fade in and fade out
   const audioFilter = `afade=t=in:st=0:d=${audioFadeIn},afade=t=out:st=${audioFadeOutStart}:d=${audioFadeOut}`;
   
+  // CRITICAL: Add explicit duration cap (-t) to prevent infinite audio loops
+  // Use -stream_loop -1 to loop music, but cap with -t to video duration
+  // -shortest ensures we stop when video ends (redundant with -t but safe)
   const args = [
     '-y',
     '-i', videoPath,
-    '-stream_loop', '-1',
+    '-stream_loop', '-1', // Loop audio
     '-i', audioPath,
-    '-shortest',
+    '-t', videoDuration.toFixed(3), // CRITICAL: Explicit duration cap
+    '-shortest', // Also stop when shortest stream ends (redundant but safe)
     '-c:v', 'copy',
     '-filter:a', audioFilter,
     '-c:a', 'aac',
@@ -596,19 +640,14 @@ async function muxAudioVideo(videoPath, audioPath, outputPath, videoDuration) {
   
   console.log('[FADE] audioFadeIn=' + audioFadeIn + ' audioFadeOut=' + audioFadeOut + ' duration=' + videoDuration);
   console.log('[MUSIC] ffmpegCmd=' + ffmpeg + ' ' + args.join(' '));
-  console.log('[MUSIC] Starting mux with timeout protection (max 120s)...');
   
-  // Add timeout wrapper for music muxing (max 2 minutes)
-  const timeoutMs = 120000; // 2 minutes
-  const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => {
-      reject(new Error(`Music muxing timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
+  // Use run() with timeout and stage logging
+  const result = await run(ffmpeg, args, { 
+    env: process.env,
+    timeout: 180000, // 3 minutes max for music muxing
+    stage: 'add_music'
   });
   
-  const muxPromise = run(ffmpeg, args, { env: process.env });
-  const result = await Promise.race([muxPromise, timeoutPromise]);
-  console.log('[MUSIC] Mux completed successfully');
   return result;
 }
 
@@ -904,6 +943,7 @@ setInterval(() => {
 
 // -------------------- Main Handler --------------------
 async function createMemoryRenderOnly(req, res) {
+  const handlerStartTime = Date.now();
   console.log('[CREATE_MEMORY] render-only handler hit');
   try {
     if (!S3_BUCKET) {
@@ -1190,15 +1230,25 @@ async function createMemoryRenderOnly(req, res) {
     // Generate seed for deterministic motion (use jobId hash)
     const motionSeed = jobId;
     
-    await renderSlideshow({
-      framesDir: renderFramesDir,
-      frameCount: orderedKeys.length,
-      outPath: silentMp4,
-      fps,
-      aspectRatio,
-      motionPack: finalMotionPack,
-      motionSeed,
-    });
+    const renderStartTime = Date.now();
+    console.log(`[PIPE] stage=render_slideshow start jobId=${jobId}`);
+    try {
+      await renderSlideshow({
+        framesDir: renderFramesDir,
+        frameCount: orderedKeys.length,
+        outPath: silentMp4,
+        fps,
+        aspectRatio,
+        motionPack: finalMotionPack,
+        motionSeed,
+      });
+      const renderElapsed = Date.now() - renderStartTime;
+      console.log(`[PIPE] stage=render_slideshow done ms=${renderElapsed} jobId=${jobId}`);
+    } catch (renderErr) {
+      const renderElapsed = Date.now() - renderStartTime;
+      console.error(`[PIPE] stage=render_slideshow fail ms=${renderElapsed} jobId=${jobId} error=${renderErr.message}`);
+      throw renderErr;
+    }
 
     const silentStat = await fsp.stat(silentMp4);
     console.log(`[CREATE_MEMORY] ffmpeg done size=${silentStat.size} bytes`);
@@ -1261,7 +1311,17 @@ async function createMemoryRenderOnly(req, res) {
     // Apply video fades to silent video first
     progressStore.set(jobId, { percent: 88, step: 'rendering', detail: 'Applying video effects...' });
     const videoWithFades = path.join(outDir, 'video_with_fades.mp4');
-    await applyFades(silentMp4, videoWithFades, videoDuration);
+    const fadeStartTime = Date.now();
+    console.log(`[PIPE] stage=apply_fades start jobId=${jobId}`);
+    try {
+      await applyFades(silentMp4, videoWithFades, videoDuration);
+      const fadeElapsed = Date.now() - fadeStartTime;
+      console.log(`[PIPE] stage=apply_fades done ms=${fadeElapsed} jobId=${jobId}`);
+    } catch (fadeErr) {
+      const fadeElapsed = Date.now() - fadeStartTime;
+      console.error(`[PIPE] stage=apply_fades fail ms=${fadeElapsed} jobId=${jobId} error=${fadeErr.message}`);
+      throw fadeErr;
+    }
     
     // Music muxing stage
     progressStore.set(jobId, { percent: 92, step: 'rendering', detail: 'Adding music...' });
@@ -1271,6 +1331,8 @@ async function createMemoryRenderOnly(req, res) {
     let musicKeyUsed = null;
 
     if (enableMusic) {
+      const musicStartTime = Date.now();
+      console.log(`[PIPE] stage=add_music start jobId=${jobId}`);
       try {
         // Select and download music
         const musicKey = await selectMusicTrack(S3_BUCKET, context, photoKeys);
@@ -1294,8 +1356,11 @@ async function createMemoryRenderOnly(req, res) {
         }
 
         musicKeyUsed = musicKey;
-        console.log('[MUSIC] Music mux successful');
+        const musicElapsed = Date.now() - musicStartTime;
+        console.log(`[PIPE] stage=add_music done ms=${musicElapsed} jobId=${jobId} musicKey=${musicKey}`);
       } catch (musicErr) {
+        const musicElapsed = Date.now() - musicStartTime;
+        console.error(`[PIPE] stage=add_music fail ms=${musicElapsed} jobId=${jobId} code=${musicErr.code || 'unknown'} signal=${musicErr.signal || 'none'} stderrTail=${(musicErr.stderr?.slice(-200) || musicErr.message).slice(-200)}`);
         console.error('[MUSIC] Music mux failed:', musicErr.message);
         console.error('[MUSIC] ffmpegExitCode=' + (musicErr.code || 'unknown'));
         console.error('[MUSIC] stderrTail=' + (musicErr.stderr?.slice(-200) || ''));
@@ -1304,6 +1369,8 @@ async function createMemoryRenderOnly(req, res) {
           stderrTail: musicErr.stderr?.slice(-200) || musicErr.message,
         });
       }
+    } else {
+      console.log(`[PIPE] stage=add_music skipped (music disabled) jobId=${jobId}`);
     }
 
     const finalStat = await fsp.stat(finalMp4);
@@ -1350,9 +1417,12 @@ async function createMemoryRenderOnly(req, res) {
     // Log end cap enablement before calling appendEndCap
     console.log('[ENDCAP] enabled=', enableEndCap, 'TRACE_ENDCAP=', process.env.TRACE_ENDCAP);
     
+    let endCapEnabled = false;
     if (enableEndCap) {
+      const endCapStartTime = Date.now();
+      console.log(`[PIPE] stage=append_endcap start jobId=${jobId}`);
+      progressStore.set(jobId, { percent: 97, step: 'rendering', detail: 'Adding end card...' });
       try {
-        progressStore.set(jobId, { percent: 97, step: 'rendering', detail: 'Adding end card...' });
         const endCapMp4 = path.join(outDir, 'final_with_endcap.mp4');
         console.log('[ENDCAP] Starting end cap append...');
         await appendEndCap(finalMp4, endCapMp4);
@@ -1362,13 +1432,20 @@ async function createMemoryRenderOnly(req, res) {
         const endCapStat = await fsp.stat(finalMp4);
         console.log(`[ENDCAP] Final video with end cap size=${endCapStat.size} bytes`);
         progressStore.set(jobId, { percent: 98, step: 'rendering', detail: 'End card added...' });
+        endCapEnabled = true;
+        const endCapElapsed = Date.now() - endCapStartTime;
+        console.log(`[PIPE] stage=append_endcap done ms=${endCapElapsed} jobId=${jobId}`);
       } catch (endCapError) {
+        const endCapElapsed = Date.now() - endCapStartTime;
+        console.error(`[PIPE] stage=append_endcap fail ms=${endCapElapsed} jobId=${jobId} error=${endCapError.message}`);
         console.error('[ENDCAP] Failed to append end cap:', endCapError.message);
         console.error('[ENDCAP] Falling back to original video (no end cap)');
         // Continue with original finalMp4 (no end cap)
+        endCapEnabled = false;
       }
     } else {
       console.log('[ENDCAP] End cap disabled (premium user opted out or admin override)');
+      endCapEnabled = false;
     }
 
     // Upload to published
@@ -1382,11 +1459,17 @@ async function createMemoryRenderOnly(req, res) {
     console.log(`[CREATE_MEMORY] localFile=${finalMp4}`);
     console.log(`[CREATE_MEMORY] fileSize=${finalStat.size} bytes`);
 
+    const uploadStartTime = Date.now();
+    console.log(`[PIPE] stage=s3_upload start jobId=${jobId}`);
     try {
       await uploadFileToS3(S3_BUCKET, videoKey, finalMp4, 'video/mp4');
       console.log(`[CREATE_MEMORY] S3_UPLOAD_SUCCESS key=${videoKey}`);
       progressStore.set(jobId, { percent: 100, step: 'complete', detail: 'Video ready!' });
+      const uploadElapsed = Date.now() - uploadStartTime;
+      console.log(`[PIPE] stage=s3_upload done ms=${uploadElapsed} jobId=${jobId}`);
     } catch (uploadError) {
+      const uploadElapsed = Date.now() - uploadStartTime;
+      console.error(`[PIPE] stage=s3_upload fail ms=${uploadElapsed} jobId=${jobId} error=${uploadError.message}`);
       console.error(`[CREATE_MEMORY] S3_UPLOAD_FAILED key=${videoKey}`);
       console.error(`[CREATE_MEMORY] uploadError=${uploadError.message || uploadError}`);
       console.error(`[CREATE_MEMORY] uploadErrorCode=${uploadError.code || 'unknown'}`);
@@ -1449,12 +1532,19 @@ async function createMemoryRenderOnly(req, res) {
     console.log(`[CREATE_MEMORY] holdSec = ${hold.toFixed(2)}`);
     console.log(`[CREATE_MEMORY] xfadeSec = ${xfade}`);
     console.log(`[CREATE_MEMORY] actualDurationSec = ${actualDuration ? actualDuration.toFixed(2) : 'null'}`);
+    console.log(`[CREATE_MEMORY] motionPackUsed = ${finalMotionPack}`);
+    console.log(`[CREATE_MEMORY] motionEnabled = ${motionEnabled}`);
+    console.log(`[CREATE_MEMORY] endCapEnabled = ${endCapEnabled}`);
+    console.log(`[CREATE_MEMORY] musicTrackUsed = ${musicKeyUsed || 'none'}`);
     console.log(`[CREATE_MEMORY] ========================================`);
 
     // Cleanup best-effort
     fsp.rm(baseDir, { recursive: true, force: true }).catch(() => {});
 
-    return res.status(200).json({
+    const responseStartTime = Date.now();
+    console.log(`[PIPE] stage=response_send start jobId=${jobId}`);
+    
+    const responseData = {
       ok: true,
       jobId,
       videoKey,
@@ -1466,6 +1556,10 @@ async function createMemoryRenderOnly(req, res) {
       holdSec: parseFloat(hold.toFixed(2)),
       xfadeSec: xfade,
       actualDurationSec: actualDuration ? parseFloat(actualDuration.toFixed(2)) : null,
+      motionPackUsed: finalMotionPack,
+      motionEnabled: motionEnabled,
+      endCapEnabled: endCapEnabled,
+      musicTrackUsed: musicKeyUsed || null,
       missingKeys: [],
       orderUsed: finalOrder,
       musicKeyUsed: musicKeyUsed,

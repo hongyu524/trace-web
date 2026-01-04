@@ -227,6 +227,7 @@ export async function getSequenceOrder(params: {
 /**
  * Create memory video via Railway /api/create-memory
  * Calls Railway backend for render-only video creation
+ * Includes timeout protection (10 minutes) to prevent indefinite hanging
  */
 export async function createMemoryRender(params: {
   photoKeys: string[];
@@ -242,25 +243,44 @@ export async function createMemoryRender(params: {
   }
 
   console.log(`[API] Calling Railway: ${API_BASE}/api/create-memory`);
-  const res = await fetch(`${API_BASE}/api/create-memory`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(params),
-  });
-
-  const text = await res.text();
-  let data: any;
+  
+  // Add timeout protection (10 minutes)
+  const timeoutMs = 10 * 60 * 1000; // 10 minutes
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+  
   try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error(`Create-memory returned non-JSON: ${text.slice(0, 200)}`);
-  }
+    const res = await fetch(`${API_BASE}/api/create-memory`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+      signal: controller.signal,
+    });
 
-  if (!res.ok) {
-    return { ok: false, error: data?.error || "create_memory_failed", detail: data?.detail || text };
-  }
+    clearTimeout(timeoutId);
 
-  return data as CreateMemoryResponse;
+    const text = await res.text();
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`Create-memory returned non-JSON: ${text.slice(0, 200)}`);
+    }
+
+    if (!res.ok) {
+      return { ok: false, error: data?.error || "create_memory_failed", detail: data?.detail || text };
+    }
+
+    return data as CreateMemoryResponse;
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('Render is taking longer than expected. Please retry or check status.');
+    }
+    throw err;
+  }
 }
 
 /**
