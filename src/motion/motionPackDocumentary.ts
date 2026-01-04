@@ -64,6 +64,8 @@ export interface ShotMetadata {
   previousPreset?: MotionPresetName;
   /** Previous-to-previous preset name */
   previousPreviousPreset?: MotionPresetName;
+  /** Previous clip's ending progress (0..1) for motion continuity */
+  prevProgressEnd?: number;
   /** Anchor point X (0-1 normalized) - focal point from auto-reframe */
   anchorX?: number;
   /** Anchor point Y (0-1 normalized) - focal point from auto-reframe */
