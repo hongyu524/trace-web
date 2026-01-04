@@ -1561,7 +1561,7 @@ async function createMemoryRenderOnly(req, res) {
       endCapEnabled: endCapEnabled,
       musicTrackUsed: musicKeyUsed || null,
       missingKeys: [],
-      orderUsed: optimalOrder,
+      orderUsed: order || [],
       musicKeyUsed: musicKeyUsed,
       aspectRatioUsed: aspectRatio,
       fpsUsed: fps,
