@@ -12,6 +12,96 @@ import { createFramePlan, applyFramePlan, createFramePlansBatch } from './auto-r
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Firebase Admin SDK (lazy-loaded to avoid startup dependency if not configured)
+let firebaseAdmin = null;
+let firebaseApp = null;
+
+async function initFirebaseAdmin() {
+  if (firebaseAdmin) return firebaseAdmin; // Already initialized
+  
+  try {
+    // Only import if FIREBASE_PROJECT_ID is set (indicates Firebase is configured)
+    if (!process.env.FIREBASE_PROJECT_ID) {
+      return null; // Firebase not configured
+    }
+    
+    firebaseAdmin = await import('firebase-admin');
+    
+    // Initialize Firebase Admin if not already initialized
+    if (!firebaseApp) {
+      // Use service account key if provided, otherwise use default credentials
+      if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+        firebaseApp = firebaseAdmin.default.initializeApp({
+          credential: firebaseAdmin.default.credential.cert(serviceAccount),
+        });
+      } else {
+        // Try default credentials (e.g., from GCP environment)
+        firebaseApp = firebaseAdmin.default.initializeApp();
+      }
+    }
+    
+    return firebaseAdmin;
+  } catch (err) {
+    console.warn('[AUTH] Firebase Admin initialization failed:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Verify Bearer token and extract user plan from Firebase
+ * Returns { uid, plan: 'free' | 'premium', verified: true } or { verified: false, plan: 'free' }
+ */
+async function verifyUserPlan(authHeader) {
+  // Default to free if no auth header
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { verified: false, plan: 'free', uid: null };
+  }
+  
+  const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+  
+  try {
+    const admin = await initFirebaseAdmin();
+    if (!admin) {
+      // Firebase not configured - default to free
+      console.warn('[AUTH] Firebase not configured, defaulting to free plan');
+      return { verified: false, plan: 'free', uid: null };
+    }
+    
+    // Verify the token
+    const decodedToken = await admin.default.auth().verifyIdToken(token);
+    const uid = decodedToken.uid;
+    
+    // Check custom claims first (preferred method)
+    const plan = decodedToken.plan || decodedToken.claims?.plan;
+    if (plan === 'premium') {
+      return { verified: true, plan: 'premium', uid };
+    }
+    
+    // Fallback to Firestore lookup if custom claim not set
+    try {
+      const db = admin.default.firestore();
+      const userDoc = await db.collection('users').doc(uid).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        const firestorePlan = userData?.plan;
+        if (firestorePlan === 'premium') {
+          return { verified: true, plan: 'premium', uid };
+        }
+      }
+    } catch (firestoreErr) {
+      console.warn('[AUTH] Firestore lookup failed:', firestoreErr.message);
+    }
+    
+    // Default to free if not premium
+    return { verified: true, plan: 'free', uid };
+  } catch (err) {
+    console.warn('[AUTH] Token verification failed:', err.message);
+    // Invalid token - default to free
+    return { verified: false, plan: 'free', uid: null };
+  }
+}
+
 // -------------------- Config --------------------
 const AWS_REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-2';
 const S3_BUCKET = process.env.S3_BUCKET;
@@ -1059,14 +1149,14 @@ async function createMemoryRenderOnly(req, res) {
     } else if (isPremium) {
       // Premium users: end cap ON unless explicitly disabled
       enableEndCap = requestedEndCap !== false;
-      console.log(`[ENDCAP] Premium user: endCap=${enableEndCap} (requested=${requestedEndCap})`);
+      console.log(`[ENDCAP] Premium user (verified): endCap=${enableEndCap} (requested=${requestedEndCap}) uid=${userPlanInfo.uid || 'none'}`);
     } else {
       // Free users: FORCED ON (ignore any endCap: false from frontend)
       enableEndCap = true;
       if (requestedEndCap === false) {
-        console.log('[ENDCAP] Free user attempted to disable end cap - ignoring (FORCED ON)');
+        console.log(`[ENDCAP] Free user attempted to disable end cap - ignoring (FORCED ON) uid=${userPlanInfo.uid || 'none'}`);
       } else {
-        console.log('[ENDCAP] Free user: end cap FORCED ON (no override allowed)');
+        console.log(`[ENDCAP] Free user (verified): end cap FORCED ON (no override allowed) uid=${userPlanInfo.uid || 'none'}`);
       }
     }
     
