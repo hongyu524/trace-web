@@ -144,26 +144,43 @@ function generateSeed(shotMeta: ShotMetadata, globalSeed?: number): number {
 }
 
 /**
- * Easing function: easeInOutSine (smooth, cinematic)
+ * Easing function: easeOutCubic (non-zero initial velocity, smooth deceleration)
  */
-function easeInOutSine(t: number): number {
-  return -(Math.cos(Math.PI * t) - 1) / 2;
+function easeOutCubic(t: number): number {
+  t = Math.max(0, Math.min(1, t));
+  return 1 - Math.pow(1 - t, 3);
 }
 
 /**
- * Documentary progress function: starts mid-curve for continuous motion from frame 1
- * Eliminates "pause then move" feel by cutting into the ease curve at startOffset
- * @param t - Normalized time (0..1)
- * @param startOffset - Starting point in ease curve (default 0.12 = 12% into curve)
- * @returns Eased progress value
+ * Easing function: easeInOut (for time remap, smooth transition)
  */
-function docProgress(t: number, startOffset: number = 0.12): number {
+function easeInOut(t: number): number {
   t = Math.max(0, Math.min(1, t));
-  // Cut into mid-curve: startOffset + (1 - startOffset) * t
-  // This means at t=0, we're at startOffset in the ease curve (already moving)
-  // At t=1, we're at 1.0 in the ease curve (full motion)
-  const tt = startOffset + (1 - startOffset) * t;
-  return easeInOutSine(tt);
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+/**
+ * Linear interpolation helper
+ */
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+/**
+ * Documentary progress function: time remap with cut-in for continuous motion from frame 1
+ * Eliminates "pause then move" feel by starting mid-curve with non-zero initial velocity
+ * @param t - Normalized time (0..1)
+ * @param pStart - Starting point in ease curve (default 0.14 = 14% into curve)
+ * @param pEnd - Ending point in ease curve (default 0.96 = 96% into curve)
+ * @returns Eased progress value with non-zero initial velocity
+ */
+function docProgress(t: number, pStart: number = 0.14, pEnd: number = 0.96): number {
+  t = Math.max(0, Math.min(1, t));
+  // Time remap: lerp(pStart, pEnd, easeInOut(t))
+  // This creates a smooth curve that starts at pStart and ends at pEnd
+  const remappedT = lerp(pStart, pEnd, easeInOut(t));
+  // Apply easeOutCubic for non-zero initial velocity (smooth deceleration)
+  return easeOutCubic(remappedT);
 }
 
 /**
@@ -364,10 +381,10 @@ export function getDocumentaryTransformAt(
       const defaultEndScale = 1.025;
       const endScale = defaultEndScale;
       
-      // Use docProgress for continuous motion from frame 1 (no hold/pause)
-      const eased = docProgress(t);
+      // Use docProgress with time remap for continuous motion from frame 1 (non-zero initial velocity)
+      const progress = docProgress(t);
       
-      scale = cfg.minScale + (endScale - cfg.minScale) * eased;
+      scale = cfg.minScale + (endScale - cfg.minScale) * progress;
       translateX = 0;
       translateY = 0;
       break;
@@ -378,10 +395,10 @@ export function getDocumentaryTransformAt(
       const startScale = cfg.maxScale;
       const endScale = cfg.minScale;
       
-      // Use docProgress for continuous motion from frame 1 (no hold/pause)
-      const eased = docProgress(t);
+      // Use docProgress with time remap for continuous motion from frame 1 (non-zero initial velocity)
+      const progress = docProgress(t);
       
-      scale = startScale - (startScale - endScale) * eased;
+      scale = startScale - (startScale - endScale) * progress;
       translateX = 0;
       translateY = 0;
       break;
@@ -440,10 +457,10 @@ export function getDocumentaryTransformAt(
       // For single-layer implementation, use subtle push-in
       const endScale = 1.02; // Middle ground (consistent)
       
-      // Use docProgress for continuous motion from frame 1 (no hold/pause)
-      const eased = docProgress(t);
+      // Use docProgress with time remap for continuous motion from frame 1 (non-zero initial velocity)
+      const progress = docProgress(t);
       
-      scale = cfg.minScale + (endScale - cfg.minScale) * eased;
+      scale = cfg.minScale + (endScale - cfg.minScale) * progress;
       translateX = 0;
       translateY = 0;
       break;
