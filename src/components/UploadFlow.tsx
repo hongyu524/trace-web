@@ -151,13 +151,16 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
       console.log('[CREATE_MEMORY] order.last5 =', optimalOrder.slice(-5));
       console.log('[CREATE_MEMORY] context.length =', (promptText.trim() || '').length);
       
+      const motionPack = 'documentary'; // TODO: Add UI selector for motion pack
       const requestBody = {
         photoKeys,
         order: optimalOrder,
         aspectRatio: outputRatio,
         fps,
         context: promptText.trim() || undefined,
+        motionPack,
       };
+      console.log('[CREATE_MEMORY] sending', { motionPack, aspectRatio: outputRatio, fps, photoKeysCount: photoKeys.length });
       console.log('[CREATE_MEMORY] requestBody.photoKeys.length =', requestBody.photoKeys.length);
       console.log('[CREATE_MEMORY] requestBody.order.length =', requestBody.order.length);
       console.log('[CREATE_MEMORY] ========================================');

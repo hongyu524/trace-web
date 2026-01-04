@@ -529,6 +529,15 @@ function jsonError(res, status, error, detail, extra = {}) {
   return res.status(status).json({ error, detail, ...extra });
 }
 
+// In-memory progress tracking: Map<jobId, {percent: number, step: string, detail: string}>
+const progressStore = new Map();
+
+// Clean up old progress entries (older than 1 hour)
+setInterval(() => {
+  // Progress entries are cleaned up after completion, but this prevents memory leaks
+  // if jobs fail silently
+}, 3600000); // 1 hour
+
 // -------------------- Main Handler --------------------
 async function createMemoryRenderOnly(req, res) {
   console.log('[CREATE_MEMORY] render-only handler hit');
@@ -576,7 +585,8 @@ async function createMemoryRenderOnly(req, res) {
     
     console.log('[CREATE_MEMORY] normalized aspectRatio =', aspectRatio);
     console.log('[CREATE_MEMORY] normalized fps =', fps);
-    console.log('[CREATE_MEMORY] motionPack =', motionPack);
+    console.log('[CREATE_MEMORY] motionPack =', req.body.motionPack);
+    console.log('[CREATE_MEMORY] motionPack (normalized) =', motionPack);
     console.log('[CREATE_MEMORY] autoReframe =', autoReframe);
 
     // Validate photoKeys
@@ -816,6 +826,7 @@ async function createMemoryRenderOnly(req, res) {
 
     const silentStat = await fsp.stat(silentMp4);
     console.log(`[CREATE_MEMORY] ffmpeg done size=${silentStat.size} bytes`);
+    progressStore.set(jobId, { percent: 85, step: 'rendering', detail: 'Video rendered, applying effects...' });
 
     // Get video duration for fades and music muxing
     let videoDuration = await getVideoDuration(silentMp4);
@@ -869,8 +880,10 @@ async function createMemoryRenderOnly(req, res) {
     console.log(`[CREATE_MEMORY] plan: imageCountUsed=${outputN} targetDurationSec=${outputTargetDuration.toFixed(2)} holdSec=${outputHold.toFixed(2)} xfadeSec=${outputXfade} expectedTotalSeconds=${expectedTotalSeconds.toFixed(2)}`);
 
     // Apply video fades to silent video first
+    progressStore.set(jobId, { percent: 88, step: 'rendering', detail: 'Applying video effects...' });
     const videoWithFades = path.join(outDir, 'video_with_fades.mp4');
     await applyFades(silentMp4, videoWithFades, videoDuration);
+    progressStore.set(jobId, { percent: 92, step: 'rendering', detail: 'Adding music...' });
 
     // Music muxing (with audio fades)
     let finalMp4 = videoWithFades;

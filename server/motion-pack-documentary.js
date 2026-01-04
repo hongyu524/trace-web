@@ -36,16 +36,16 @@ class SeededRNG {
  */
 function getDocumentaryDefaults() {
   return {
-    staticWeight: 0.45,        // 45% static
-    pushInWeight: 0.35,        // 35% push-in
-    driftWeight: 0.15,         // 15% drift (7.5% L, 7.5% R)
-    pullBackWeight: 0.05,      // 5% pull-back
+    staticWeight: 0.10,        // 10% static (reduced from 45% for more movement)
+    pushInWeight: 0.40,        // 40% push-in (increased from 35%)
+    driftWeight: 0.40,         // 40% drift (20% L, 20% R) (increased from 15%)
+    pullBackWeight: 0.10,      // 10% pull-back (increased from 5%)
     parallaxWeight: 0.0,       // 0% parallax (not supported by default)
     transitionDuration: 0.4,   // 400ms
     minScale: 1.01,
-    maxScale: 1.035,
+    maxScale: 1.06,            // Increased from 1.035 to 1.06 for documentary (more headroom)
     minDriftPercent: 0.8,      // 0.8% of frame width
-    maxDriftPercent: 2.0,      // 2.0% of frame width
+    maxDriftPercent: 1.5,      // 1.5% of frame width (documentary: up to 1.5% for subtle but visible)
   };
 }
 
