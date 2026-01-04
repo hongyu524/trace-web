@@ -151,6 +151,22 @@ function easeInOutSine(t: number): number {
 }
 
 /**
+ * Documentary progress function: starts mid-curve for continuous motion from frame 1
+ * Eliminates "pause then move" feel by cutting into the ease curve at startOffset
+ * @param t - Normalized time (0..1)
+ * @param startOffset - Starting point in ease curve (default 0.12 = 12% into curve)
+ * @returns Eased progress value
+ */
+function docProgress(t: number, startOffset: number = 0.12): number {
+  t = Math.max(0, Math.min(1, t));
+  // Cut into mid-curve: startOffset + (1 - startOffset) * t
+  // This means at t=0, we're at startOffset in the ease curve (already moving)
+  // At t=1, we're at 1.0 in the ease curve (full motion)
+  const tt = startOffset + (1 - startOffset) * t;
+  return easeInOutSine(tt);
+}
+
+/**
  * Clamp helper
  */
 function clamp(v: number, min: number, max: number): number {
@@ -280,38 +296,28 @@ export function getDocumentaryTransformAt(
       break;
 
     case 'SLOW_PUSH_IN': {
-      // Scale: 1.0 -> random(minScale, maxScale)
-      const endScale = rng.nextFloat(cfg.minScale, cfg.maxScale);
+      // Scale: minScale -> maxScale (use default 1.025 for consistency)
+      const defaultEndScale = 1.025;
+      const endScale = defaultEndScale;
       
-      // Apply hold phase + easeInOutSine
-      const holdFrac = cfg.holdFraction;
-      let tMove = 0;
-      if (t >= holdFrac) {
-        const moveProgress = (t - holdFrac) / (1 - holdFrac);
-        tMove = clamp(moveProgress, 0, 1);
-      }
-      const eased = easeInOutSine(tMove);
+      // Use docProgress for continuous motion from frame 1 (no hold/pause)
+      const eased = docProgress(t);
       
-      scale = 1.0 + (endScale - 1.0) * eased;
+      scale = cfg.minScale + (endScale - cfg.minScale) * eased;
       translateX = 0;
       translateY = 0;
       break;
     }
 
     case 'SLOW_PULL_BACK': {
-      // Scale: random(minScale, maxScale) -> 1.0
-      const startScale = rng.nextFloat(cfg.minScale, cfg.maxScale);
+      // Scale: maxScale -> minScale (pull back)
+      const startScale = cfg.maxScale;
+      const endScale = cfg.minScale;
       
-      // Apply hold phase + easeInOutSine
-      const holdFrac = cfg.holdFraction;
-      let tMove = 0;
-      if (t >= holdFrac) {
-        const moveProgress = (t - holdFrac) / (1 - holdFrac);
-        tMove = clamp(moveProgress, 0, 1);
-      }
-      const eased = easeInOutSine(tMove);
+      // Use docProgress for continuous motion from frame 1 (no hold/pause)
+      const eased = docProgress(t);
       
-      scale = startScale - (startScale - 1.0) * eased;
+      scale = startScale - (startScale - endScale) * eased;
       translateX = 0;
       translateY = 0;
       break;
@@ -346,14 +352,9 @@ export function getDocumentaryTransformAt(
         actualDriftPx = desiredDriftPx;
       }
       
-      // Apply hold phase + easeInOutSine (same eased progress for scale and translate)
-      const holdFrac = cfg.holdFraction;
-      let tMove = 0;
-      if (t >= holdFrac) {
-        const moveProgress = (t - holdFrac) / (1 - holdFrac);
-        tMove = clamp(moveProgress, 0, 1);
-      }
-      const eased = easeInOutSine(tMove);
+      // Use docProgress for continuous motion from frame 1 (no hold/pause)
+      // Same eased progress for scale and translate
+      const eased = docProgress(t);
       
       // Interpolate scale and pan with same eased progress
       scale = startScale + (endScale - startScale) * eased;
@@ -365,18 +366,12 @@ export function getDocumentaryTransformAt(
     case 'PARALLAX_PUSH_IN': {
       // Parallax: background and foreground scale differently
       // For single-layer implementation, use subtle push-in
-      const endScale = rng.nextFloat(1.015, 1.025); // Middle ground
+      const endScale = 1.02; // Middle ground (consistent)
       
-      // Apply hold phase + easeInOutSine
-      const holdFrac = cfg.holdFraction;
-      let tMove = 0;
-      if (t >= holdFrac) {
-        const moveProgress = (t - holdFrac) / (1 - holdFrac);
-        tMove = clamp(moveProgress, 0, 1);
-      }
-      const eased = easeInOutSine(tMove);
+      // Use docProgress for continuous motion from frame 1 (no hold/pause)
+      const eased = docProgress(t);
       
-      scale = 1.0 + (endScale - 1.0) * eased;
+      scale = cfg.minScale + (endScale - cfg.minScale) * eased;
       translateX = 0;
       translateY = 0;
       break;
