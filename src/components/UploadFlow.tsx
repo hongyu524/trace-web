@@ -255,7 +255,7 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
         <img
           src="/trace_logo_1k_v2_hy001.png"
           alt="Trace"
-          className="w-40 h-40 object-contain"
+          className="w-20 h-20 object-contain"
         />
       </div>
 
