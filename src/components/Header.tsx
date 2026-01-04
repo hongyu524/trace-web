@@ -2,7 +2,44 @@ interface HeaderProps {
   onNavigate?: (page: 'home' | 'pricing' | 'enterprise' | 'community') => void;
 }
 
-export default function Header({ onNavigate }: HeaderProps) {
+interface HeaderProps {
+  onNavigate?: (page: 'home' | 'pricing' | 'enterprise' | 'community') => void;
+  centered?: boolean;
+}
+
+export default function Header({ onNavigate, centered = false }: HeaderProps) {
+  if (centered) {
+    return (
+      <header className="w-full bg-black/80 backdrop-blur-xl border-b border-white/5 sticky top-0 z-50">
+        <nav className="max-w-7xl mx-auto px-6 lg:px-8 py-4 flex items-center justify-center">
+          {/* Navigation Links - Centered */}
+          <div className="flex items-center space-x-8">
+            <button
+              onClick={() => onNavigate?.('community')}
+              className="text-white/90 hover:text-white transition-colors text-sm font-normal"
+            >
+              Community
+            </button>
+            
+            <button
+              onClick={() => onNavigate?.('enterprise')}
+              className="text-white/90 hover:text-white transition-colors text-sm font-normal"
+            >
+              Enterprise
+            </button>
+            
+            <button
+              onClick={() => onNavigate?.('pricing')}
+              className="text-white/90 hover:text-white transition-colors text-sm font-normal"
+            >
+              Pricing
+            </button>
+          </div>
+        </nav>
+      </header>
+    );
+  }
+
   return (
     <header className="w-full bg-black/80 backdrop-blur-xl border-b border-white/5 sticky top-0 z-50">
       <nav className="max-w-7xl mx-auto px-6 lg:px-8 py-3 flex items-center justify-between">
