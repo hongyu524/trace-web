@@ -357,13 +357,20 @@ export function getDocumentaryTransformAt(
     config?: DocumentaryMotionConfig;
     anchorX?: number;  // Focal point X (0-1 normalized)
     anchorY?: number;  // Focal point Y (0-1 normalized)
+    frame?: number;    // Current frame index (0-based)
+    frames?: number;   // Total frame count
   }
 ): DocumentaryTransformAt {
   const cfg = params.config ?? getDocumentaryDefaults();
   const rng = params.seed !== undefined ? new SeededRNG(params.seed) : new SeededRNG(12345);
   
-  // Clamp t to [0, 1]
-  t = Math.max(0, Math.min(1, t));
+  // Use frame-based calculation if available, otherwise fall back to normalized time t
+  const u = params.frame !== undefined && params.frames !== undefined
+    ? params.frame / Math.max(1, params.frames - 1)
+    : clamp01(t);
+  
+  // Cut-in progress: starts at 0.14, ends at 0.96 (never starts at 0)
+  const p = cutInProgress(u, 0.14, 0.96);
 
   // All presets have rotateDeg = 0
   const rotateDeg = 0;
