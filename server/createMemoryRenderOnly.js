@@ -181,6 +181,16 @@ function run(cmd, args, opts = {}) {
   
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
+    
+    // Log BEFORE spawn
+    const cmdStr = `${cmd} ${args.map(a => a.includes(' ') ? `"${a}"` : a).join(' ')}`;
+    console.log(`[PIPE] ============`);
+    console.log(`[PIPE] stage=${stage} BEFORE_SPAWN`);
+    console.log(`[PIPE] cmd=${cmd}`);
+    console.log(`[PIPE] args=${args.length} items timeout=${timeoutMs}ms`);
+    console.log(`[PIPE] fullCommand=${cmdStr}`);
+    console.log(`[PIPE] ============`);
+    
     const p = spawn(cmd, args, { ...opts, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
@@ -188,16 +198,22 @@ function run(cmd, args, opts = {}) {
     // Timeout handler
     const timeoutId = setTimeout(() => {
       const elapsed = Date.now() - startTime;
-      console.error(`[PIPE] stage=${stage} timeout ms=${elapsed} cmd=${cmd}`);
+      console.error(`[PIPE] ============`);
+      console.error(`[PIPE] stage=${stage} TIMEOUT`);
+      console.error(`[PIPE] elapsed=${elapsed}ms timeout=${timeoutMs}ms`);
+      console.error(`[PIPE] cmd=${cmd}`);
+      console.error(`[PIPE] ============`);
       p.kill('SIGTERM');
-      // Force kill after 5 seconds if still running
+      // Force kill after 2 seconds if still running
       setTimeout(() => {
         try {
-          p.kill('SIGKILL');
+          if (!p.killed) {
+            p.kill('SIGKILL');
+          }
         } catch (e) {
           // Process already dead
         }
-      }, 5000);
+      }, 2000);
       const err = new Error(`Command timed out after ${timeoutMs}ms: ${cmd} ${args.join(' ')}`);
       err.code = 'TIMEOUT';
       err.stage = stage;
@@ -211,15 +227,35 @@ function run(cmd, args, opts = {}) {
     p.stderr.on('data', (d) => (stderr += d.toString()));
     p.on('error', (err) => {
       clearTimeout(timeoutId);
+      const elapsed = Date.now() - startTime;
+      console.error(`[PIPE] ============`);
+      console.error(`[PIPE] stage=${stage} SPAWN_ERROR`);
+      console.error(`[PIPE] elapsed=${elapsed}ms error=${err.message}`);
+      console.error(`[PIPE] ============`);
       reject(err);
     });
     p.on('close', (code, signal) => {
       clearTimeout(timeoutId);
       const elapsed = Date.now() - startTime;
+      const stderrTail = stderr.slice(-500);
+      
       if (code === 0) {
-        console.log(`[PIPE] stage=${stage} done ms=${elapsed}`);
+        console.log(`[PIPE] ============`);
+        console.log(`[PIPE] stage=${stage} AFTER_EXIT (SUCCESS)`);
+        console.log(`[PIPE] exitCode=${code} signal=${signal || 'null'} wallTime=${elapsed}ms`);
+        console.log(`[PIPE] stdoutLength=${stdout.length} stderrLength=${stderr.length}`);
+        console.log(`[PIPE] ============`);
         return resolve({ stdout, stderr });
       }
+      
+      // Failure case
+      console.error(`[PIPE] ============`);
+      console.error(`[PIPE] stage=${stage} AFTER_EXIT (FAILURE)`);
+      console.error(`[PIPE] exitCode=${code} signal=${signal || 'null'} wallTime=${elapsed}ms`);
+      console.error(`[PIPE] stdoutLength=${stdout.length} stderrLength=${stderr.length}`);
+      console.error(`[PIPE] stderrTail=${stderrTail}`);
+      console.error(`[PIPE] ============`);
+      
       const err = new Error(`Command failed (${code}${signal ? `, signal=${signal}` : ''}): ${cmd} ${args.join(' ')}`);
       err.code = code;
       err.signal = signal;
@@ -227,8 +263,6 @@ function run(cmd, args, opts = {}) {
       err.stderr = stderr;
       err.stage = stage;
       err.elapsed = elapsed;
-      const stderrTail = stderr.slice(-500);
-      console.error(`[PIPE] stage=${stage} fail ms=${elapsed} code=${code} signal=${signal || 'none'} stderrTail=${stderrTail}`);
       reject(err);
     });
   });
@@ -508,21 +542,34 @@ function findLogoPath() {
  */
 async function appendEndCap(inputMp4Path, outputMp4Path) {
   const ffmpeg = pickFfmpegPath();
+  const startTime = Date.now();
   const logoPath = findLogoPath();
   
-  // Fail-loud logging for debugging
+  // Comprehensive fail-loud logging
+  console.log('[ENDCAP] ============');
+  console.log('[ENDCAP] Starting end cap append');
+  console.log('[ENDCAP] inputMp4Path=', inputMp4Path);
+  console.log('[ENDCAP] outputMp4Path=', outputMp4Path);
   console.log('[ENDCAP] logoPath=', logoPath);
   console.log('[ENDCAP] logoPath exists=', logoPath ? fs.existsSync(logoPath) : false);
+  console.log('[ENDCAP] TRACE_ENDCAP_STRICT=', process.env.TRACE_ENDCAP_STRICT);
+  console.log('[ENDCAP] ============');
   
   if (!logoPath) {
     const error = new Error('TRACE logo not found in assets directory');
-    console.error('[ENDCAP] FATAL: Logo not found');
+    console.error('[ENDCAP] FATAL: Logo not found - checked all paths');
+    if (process.env.TRACE_ENDCAP_STRICT === '1') {
+      throw error;
+    }
     throw error;
   }
   
   if (!fs.existsSync(logoPath)) {
     const error = new Error(`TRACE logo path exists but file not found: ${logoPath}`);
     console.error('[ENDCAP] FATAL: Logo file does not exist at path');
+    if (process.env.TRACE_ENDCAP_STRICT === '1') {
+      throw error;
+    }
     throw error;
   }
   
@@ -622,17 +669,38 @@ async function appendEndCap(inputMp4Path, outputMp4Path) {
     });
     
     // Log success and verify output duration
+    const elapsed = Date.now() - startTime;
     const outputDuration = await ffprobeDurationSeconds(outputMp4Path);
-    console.log('[ENDCAP] Success! Output duration=', outputDuration.toFixed(2), 's (input was', videoDuration.toFixed(2), 's, endcap adds', endCapDuration.toFixed(2), 's)');
+    const outputStat = await fsp.stat(outputMp4Path).catch(() => null);
+    const outputSize = outputStat ? outputStat.size : 0;
+    
+    console.log('[ENDCAP] ============');
+    console.log('[ENDCAP] Success!');
+    console.log('[ENDCAP] wallTime=', elapsed, 'ms');
+    console.log('[ENDCAP] inputDuration=', videoDuration.toFixed(2), 's');
+    console.log('[ENDCAP] outputDuration=', outputDuration.toFixed(2), 's');
+    console.log('[ENDCAP] endCapDuration=', endCapDuration.toFixed(2), 's');
+    console.log('[ENDCAP] outputSize=', outputSize, 'bytes');
+    console.log('[ENDCAP] ============');
   } catch (endCapErr) {
     // Fail-loud logging
-    console.error('[ENDCAP] FFmpeg command failed');
-    console.error('[ENDCAP] stderr tail:', endCapErr.stderr?.slice(-500) || endCapErr.message);
-    console.error('[ENDCAP] Full error:', endCapErr);
+    const elapsed = Date.now() - startTime;
+    const stderrTail = (endCapErr.stderr || endCapErr.message || '').slice(-500);
+    
+    console.error('[ENDCAP] ============');
+    console.error('[ENDCAP] FFmpeg command FAILED');
+    console.error('[ENDCAP] wallTime=', elapsed, 'ms');
+    console.error('[ENDCAP] exitCode=', endCapErr.code || 'unknown');
+    console.error('[ENDCAP] signal=', endCapErr.signal || 'none');
+    console.error('[ENDCAP] stderr tail:', stderrTail);
+    console.error('[ENDCAP] ============');
     
     // Strict mode: fail loud if enabled
     if (process.env.TRACE_ENDCAP_STRICT === '1') {
-      throw new Error(`End cap failed in strict mode: ${endCapErr.message}`);
+      const strictErr = new Error(`End cap failed in strict mode: ${endCapErr.message}`);
+      strictErr.stderr = endCapErr.stderr;
+      strictErr.code = endCapErr.code;
+      throw strictErr;
     }
     
     // Otherwise, re-throw to be caught by caller
@@ -642,43 +710,106 @@ async function appendEndCap(inputMp4Path, outputMp4Path) {
 
 async function muxAudioVideo(videoPath, audioPath, outputPath, videoDuration) {
   const ffmpeg = pickFfmpegPath();
+  const startTime = Date.now();
   
-  // Audio fade parameters
+  // Step 1: Detect if video has audio stream
+  const hasVideoAudio = await ffprobeHasAudio(videoPath);
+  console.log(`[MUSIC] Video has audio stream: ${hasVideoAudio}`);
+  
+  // Step 2: Get exact video duration from ffprobe (more reliable than passed value)
+  const actualVideoDuration = await ffprobeDurationSeconds(videoPath);
+  const durationSec = Math.max(actualVideoDuration, videoDuration);
+  console.log(`[MUSIC] Video duration: ${durationSec.toFixed(3)}s (passed: ${videoDuration.toFixed(3)}s)`);
+  
+  // Step 3: Audio fade parameters
   const audioFadeIn = 0.7;
-  const audioFadeOut = Math.min(1.5, Math.max(0.3, videoDuration * 0.1)); // Clamp fade-out, at least 0.3s
-  const audioFadeOutStart = Math.max(0, videoDuration - audioFadeOut);
+  const audioFadeOut = 2.0; // Fixed 2s fade out
+  const audioFadeOutStart = Math.max(0, durationSec - audioFadeOut);
   
-  // Audio filter: fade in and fade out
-  const audioFilter = `afade=t=in:st=0:d=${audioFadeIn},afade=t=out:st=${audioFadeOutStart}:d=${audioFadeOut}`;
+  // Step 4: Build filtergraph based on whether video has audio
+  let audioFilter;
+  let mapArgs;
   
-  // CRITICAL: Add explicit duration cap (-t) to prevent infinite audio loops
-  // Use -stream_loop -1 to loop music, but cap with -t to video duration
-  // -shortest ensures we stop when video ends (redundant with -t but safe)
+  if (hasVideoAudio) {
+    // Mixing case: video has audio, mix with music
+    // Music chain: trim to duration, fade out
+    const musicChain = `[1:a]atrim=0:${durationSec},asetpts=PTS-STARTPTS,afade=t=out:st=${audioFadeOutStart}:d=${audioFadeOut}[m]`;
+    // Video audio: resample and set volume
+    const videoAudioChain = `[0:a]aresample=48000,volume=1.0[v0]`;
+    // Music: resample and set volume (60% for background)
+    const musicResampleChain = `[m]aresample=48000,volume=0.60[m0]`;
+    // Mix both
+    const mixChain = `[v0][m0]amix=inputs=2:duration=first:dropout_transition=2[aout]`;
+    audioFilter = `${musicChain};${videoAudioChain};${musicResampleChain};${mixChain}`;
+    mapArgs = ['-map', '0:v:0', '-map', '[aout]'];
+  } else {
+    // No video audio: use music only
+    const musicChain = `[1:a]atrim=0:${durationSec},asetpts=PTS-STARTPTS,afade=t=out:st=${audioFadeOutStart}:d=${audioFadeOut}[aout]`;
+    audioFilter = musicChain;
+    mapArgs = ['-map', '0:v:0', '-map', '[aout]'];
+  }
+  
+  // Step 5: Build FFmpeg args with explicit mapping and hard duration cap
   const args = [
     '-y',
     '-i', videoPath,
-    '-stream_loop', '-1', // Loop audio
+    '-stream_loop', '-1', // Loop music
     '-i', audioPath,
-    '-t', videoDuration.toFixed(3), // CRITICAL: Explicit duration cap
-    '-shortest', // Also stop when shortest stream ends (redundant but safe)
-    '-c:v', 'copy',
-    '-filter:a', audioFilter,
+    '-filter_complex', audioFilter,
+    ...mapArgs,
+    '-c:v', 'copy', // Copy video (no re-encode)
     '-c:a', 'aac',
     '-b:a', '192k',
+    '-t', durationSec.toFixed(3), // HARD CAP: explicit duration limit
+    '-shortest', // Secondary safety: stop when shortest stream ends
+    '-movflags', '+faststart',
     outputPath,
   ];
   
-  console.log('[FADE] audioFadeIn=' + audioFadeIn + ' audioFadeOut=' + audioFadeOut + ' duration=' + videoDuration);
-  console.log('[MUSIC] ffmpegCmd=' + ffmpeg + ' ' + args.join(' '));
+  // Step 6: Log command before spawn
+  const cmdStr = `${ffmpeg} ${args.map(a => a.includes(' ') ? `"${a}"` : a).join(' ')}`;
+  console.log(`[MUSIC] ============`);
+  console.log(`[MUSIC] FFmpeg command (before spawn):`);
+  console.log(`[MUSIC] ${cmdStr}`);
+  console.log(`[MUSIC] hasVideoAudio=${hasVideoAudio} durationSec=${durationSec.toFixed(3)}`);
+  console.log(`[MUSIC] audioFilter length=${audioFilter.length} chars`);
+  console.log(`[MUSIC] ============`);
   
-  // Use run() with timeout and stage logging
-  const result = await run(ffmpeg, args, { 
-    env: process.env,
-    timeout: 180000, // 3 minutes max for music muxing
-    stage: 'add_music'
-  });
-  
-  return result;
+  // Step 7: Spawn FFmpeg with timeout
+  try {
+    const result = await run(ffmpeg, args, { 
+      env: process.env,
+      timeout: 180000, // 3 minutes max
+      stage: 'add_music'
+    });
+    
+    // Step 8: Log success with details
+    const elapsed = Date.now() - startTime;
+    const outputStat = await fsp.stat(outputPath).catch(() => null);
+    const outputSize = outputStat ? outputStat.size : 0;
+    console.log(`[MUSIC] ============`);
+    console.log(`[MUSIC] FFmpeg completed successfully`);
+    console.log(`[MUSIC] exitCode=0 signal=null wallTime=${elapsed}ms`);
+    console.log(`[MUSIC] outputFile=${outputPath}`);
+    console.log(`[MUSIC] outputSize=${outputSize} bytes`);
+    console.log(`[MUSIC] ============`);
+    
+    return result;
+  } catch (err) {
+    // Step 9: Log failure with comprehensive details
+    const elapsed = Date.now() - startTime;
+    const outputStat = await fsp.stat(outputPath).catch(() => null);
+    const outputSize = outputStat ? outputStat.size : 0;
+    const stderrTail = (err.stderr || err.message || '').slice(-500);
+    console.error(`[MUSIC] ============`);
+    console.error(`[MUSIC] FFmpeg FAILED`);
+    console.error(`[MUSIC] exitCode=${err.code || 'unknown'} signal=${err.signal || 'none'} wallTime=${elapsed}ms`);
+    console.error(`[MUSIC] outputFile=${outputPath}`);
+    console.error(`[MUSIC] outputSize=${outputSize} bytes`);
+    console.error(`[MUSIC] stderrTail=${stderrTail}`);
+    console.error(`[MUSIC] ============`);
+    throw err;
+  }
 }
 
 /**
@@ -1542,19 +1673,19 @@ async function createMemoryRenderOnly(req, res) {
     // Correct xfade overlap formula: hold = (targetDuration - xf) / N
     const hold = Math.max(0.9, (targetDuration - xfade) / N);
     
-    // Get actual video duration if available (from final output)
-    let actualDuration = null;
+    // Get actual final video duration (after all processing: music, end cap, etc.)
+    let finalDurationSec = null;
     try {
-      const finalMp4 = path.join(outDir, 'final_with_fades.mp4');
+      // Use the finalMp4 path (which may have end cap if enabled)
       if (await fsp.access(finalMp4).then(() => true).catch(() => false)) {
-        actualDuration = await getVideoDuration(finalMp4);
+        finalDurationSec = await ffprobeDurationSeconds(finalMp4);
       } else {
-        // Fallback to silent video duration
-        actualDuration = videoDuration;
+        // Fallback to videoDuration
+        finalDurationSec = videoDuration;
       }
     } catch (e) {
       // Ignore if we can't get duration
-      actualDuration = videoDuration;
+      finalDurationSec = videoDuration;
     }
 
     console.log(`[CREATE_MEMORY] ========================================`);
@@ -1565,7 +1696,7 @@ async function createMemoryRenderOnly(req, res) {
     console.log(`[CREATE_MEMORY] targetDurationSec = ${targetDuration.toFixed(2)}`);
     console.log(`[CREATE_MEMORY] holdSec = ${hold.toFixed(2)}`);
     console.log(`[CREATE_MEMORY] xfadeSec = ${xfade}`);
-    console.log(`[CREATE_MEMORY] actualDurationSec = ${actualDuration ? actualDuration.toFixed(2) : 'null'}`);
+    console.log(`[CREATE_MEMORY] finalDurationSec = ${finalDurationSec ? finalDurationSec.toFixed(2) : 'null'}`);
     console.log(`[CREATE_MEMORY] motionPackUsed = ${finalMotionPack}`);
     console.log(`[CREATE_MEMORY] motionEnabled = ${motionEnabled}`);
     console.log(`[CREATE_MEMORY] endCapEnabled = ${endCapEnabled}`);
@@ -1589,7 +1720,7 @@ async function createMemoryRenderOnly(req, res) {
       targetDurationSec: parseFloat(targetDuration.toFixed(2)),
       holdSec: parseFloat(hold.toFixed(2)),
       xfadeSec: xfade,
-      actualDurationSec: actualDuration ? parseFloat(actualDuration.toFixed(2)) : null,
+      finalDurationSec: finalDurationSec ? parseFloat(finalDurationSec.toFixed(2)) : null,
       motionPackUsed: finalMotionPack,
       motionEnabled: motionEnabled,
       endCapEnabled: endCapEnabled,
