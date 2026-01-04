@@ -1025,10 +1025,11 @@ async function renderSlideshow({
     
     if (isStaticMode || (motion.type === 'STATIC' && motion.startZoom === 1.0 && motion.endZoom === 1.0)) {
       // Static mode: no motion, just scale/crop to output size, loop for duration, set fps
-      // Use loop filter to create static frames for the segment duration
+      // Use scale with force_original_aspect_ratio=decrease and pad to center
+      // Pad filter: use -1 for x and y to center automatically (simpler than expressions)
       filterParts.push(
         `[${i}:v]scale=${outputWidth}:${outputHeight}:force_original_aspect_ratio=decrease,` +
-        `pad=${outputWidth}:${outputHeight}:(ow-iw)/2:(oh-ih)/2,` +
+        `pad=${outputWidth}:${outputHeight}:-1:-1,` +
         `loop=loop=${segmentFrames}:size=1:start=0,` +
         `setpts=PTS-STARTPTS,` +
         `fps=${fps},` +
