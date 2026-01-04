@@ -1360,6 +1360,7 @@ async function createMemoryRenderOnly(req, res) {
     }
 
     // Upload to published
+    progressStore.set(jobId, { percent: 99, step: 'rendering', detail: 'Uploading final video...' });
     const videoKey = `videos/published/${jobId}.mp4`;
     console.log(`[CREATE_MEMORY] ========================================`);
     console.log(`[CREATE_MEMORY] S3_UPLOAD_START`);
@@ -1372,6 +1373,7 @@ async function createMemoryRenderOnly(req, res) {
     try {
       await uploadFileToS3(S3_BUCKET, videoKey, finalMp4, 'video/mp4');
       console.log(`[CREATE_MEMORY] S3_UPLOAD_SUCCESS key=${videoKey}`);
+      progressStore.set(jobId, { percent: 100, step: 'complete', detail: 'Video ready!' });
     } catch (uploadError) {
       console.error(`[CREATE_MEMORY] S3_UPLOAD_FAILED key=${videoKey}`);
       console.error(`[CREATE_MEMORY] uploadError=${uploadError.message || uploadError}`);
