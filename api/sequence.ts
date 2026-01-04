@@ -246,94 +246,29 @@ Frame Rate: ${frameRate} fps
 Analyze these ${imageCount} images and determine the optimal cinematic ordering.
 Return ONLY valid JSON with keys: order (array of indices), beats (optional array), rationale (optional string).`;
 
-    // Call OpenAI Responses API
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout
-    
-    try {
-      const r = await fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "gpt-4.1-mini",
-          input: [
-            {
-              role: "system",
-              content: [{ type: "input_text", text: systemPrompt }]
-            },
-            {
-              role: "user",
-              content: [
-                { type: "input_text", text: userPrompt },
-                ...imageContents
-              ]
-            }
-          ],
-          max_output_tokens: 800,
-        }),
-        signal: controller.signal
-      });
+    // Return sequence order (using original order for now - OpenAI sequencing can be added later)
+    // Ensure sequence array is always present for backward compatibility
+    const sequence = Array.isArray(photoKeys)
+      ? photoKeys.map((key, i) => ({ key, order: i + 1 }))
+      : [];
 
-      clearTimeout(timeout);
-      
-      console.log('[SEQUENCE] OpenAI response status:', r.status);
-      
-      const json = await r.json();
-      
-      if (!r.ok) {
-        console.error('[SEQUENCE] OpenAI API error:', r.status, JSON.stringify(json).substring(0, 200));
-        return res.status(502).json({ 
-          error: "OpenAI auth failed", 
-          openaiStatus: r.status, 
-          openaiBody: json 
-        });
-      }
+    // Extract order as number array (frontend expects order: number[])
+    // Returns indices in original order [0, 1, 2, ..., n-1]
+    const order = Array.isArray(photoKeys)
+      ? photoKeys.map((_, i) => i)
+      : [];
 
-      // Ensure text is a string
-      // Extract text safely - treat OpenAI output as plain text, not JSON
-      const rawText =
-        typeof json.output_text === "string"
-          ? json.output_text
-          : Array.isArray(json.output)
-            ? json.output.map((o: any) => o?.content?.map((c: any) => c?.text).join("")).join("")
-            : String(json);
-      
-      console.log("[SEQUENCE] text type:", typeof rawText);
+    console.log(`[SEQUENCE] Returning order for ${photoKeys.length} photos: [${order.slice(0, 5).join(', ')}${order.length > 5 ? '...' : ''}]`);
 
-      // Ensure sequence array is always present for backward compatibility
-      const sequence = Array.isArray(photoKeys)
-        ? photoKeys.map((key, i) => ({ key, order: i + 1 }))
-        : [];
-
-      // Extract order as number array for backward compatibility (frontend expects order: number[])
-      const order = Array.isArray(photoKeys)
-        ? photoKeys.map((_, i) => i)
-        : [];
-
-      // Return response with narrative text
-      res.setHeader('X-RateLimit-Remaining', rateLimit.remaining.toString());
-      return res.status(200).json({
-        ok: true,
-        sequence,        // ALWAYS present, ALWAYS array
-        order,           // ALWAYS present, ALWAYS array (for backward compatibility)
-        photoKeys,       // keep
-        narrative: rawText || "",
-      });
-
-    } catch (error: any) {
-      clearTimeout(timeout);
-      
-      if (error.name === 'AbortError') {
-        console.error('[SEQUENCE] Request timed out');
-        return res.status(504).json({ error: 'Request timed out' });
-      }
-      
-      console.error('[SEQUENCE] Error calling OpenAI:', error);
-      throw error;
-    }
+    // Return response
+    res.setHeader('X-RateLimit-Remaining', rateLimit.remaining.toString());
+    return res.status(200).json({
+      ok: true,
+      sequence,        // ALWAYS present, ALWAYS array
+      order,           // ALWAYS present, ALWAYS array (for backward compatibility)
+      photoKeys,       // keep
+      narrative: "",   // Empty for now
+    });
 
   } catch (error: any) {
     console.error('[SEQUENCE] Error:', error);
