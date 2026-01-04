@@ -163,7 +163,30 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
       console.log('[CREATE_MEMORY] ========================================');
       console.log(`[UploadFlow] Calling Railway: ${API_BASE}/api/create-memory`);
       try {
+        // Show gradual progress while rendering (time-based estimates)
+        const startTime = Date.now();
+        const estimatedRenderTime = 45000; // 45 seconds estimate
+        let progressInterval: NodeJS.Timeout | null = null;
+        
+        progressInterval = setInterval(() => {
+          const elapsed = Date.now() - startTime;
+          const progressPercent = Math.min(95, 50 + (elapsed / estimatedRenderTime) * 45); // 50% to 95%
+          const steps = [
+            { min: 50, max: 60, detail: "Processing images..." },
+            { min: 60, max: 85, detail: "Rendering video..." },
+            { min: 85, max: 92, detail: "Applying effects..." },
+            { min: 92, max: 97, detail: "Adding music..." },
+            { min: 97, max: 100, detail: "Finalizing..." },
+          ];
+          const currentStep = steps.find(s => progressPercent >= s.min && progressPercent < s.max) || steps[steps.length - 1];
+          setProgress({ percent: Math.floor(progressPercent), step: "rendering", detail: currentStep.detail });
+        }, 500); // Update every 500ms
+
         const result = await createMemoryRender(requestBody);
+        
+        if (progressInterval) {
+          clearInterval(progressInterval);
+        }
 
         if (!result.ok || !result.playbackUrl) {
           throw new Error(result.detail || result.error || "Render failed.");
@@ -178,6 +201,9 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
         console.log('[UploadFlow] Memory created successfully:', result.videoKey);
         
       } catch (renderError: any) {
+        if (progressInterval) {
+          clearInterval(progressInterval);
+        }
         console.error('[UploadFlow] Render failed:', renderError.message);
         setError(renderError.message || "Failed to create memory video. Please try again.");
         setLoading(false);
