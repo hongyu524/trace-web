@@ -1028,7 +1028,7 @@ async function renderSlideshow({
       // Auto-reframe already crops to target aspect ratio, so just scale to exact dimensions
       filterParts.push(
         `[${i}:v]scale=${outputWidth}:${outputHeight},` +
-        `loop=loop=${segmentFrames}:size=1:start=0,` +
+        `loop=${segmentFrames}:size=1:start=0,` +
         `setpts=PTS-STARTPTS,` +
         `fps=${fps},` +
         `format=yuv420p[img${i}]`
