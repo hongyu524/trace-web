@@ -1561,12 +1561,16 @@ async function createMemoryRenderOnly(req, res) {
       endCapEnabled: endCapEnabled,
       musicTrackUsed: musicKeyUsed || null,
       missingKeys: [],
-      orderUsed: finalOrder,
+      orderUsed: optimalOrder,
       musicKeyUsed: musicKeyUsed,
       aspectRatioUsed: aspectRatio,
       fpsUsed: fps,
       reframeNeedsReview: reframeNeedsReview.length > 0 ? reframeNeedsReview : undefined,
-    });
+    };
+    
+    res.status(200).json(responseData);
+    const responseElapsed = Date.now() - responseStartTime;
+    console.log(`[PIPE] stage=response_send done ms=${responseElapsed} jobId=${jobId}`);
   } catch (err) {
     console.error('[CREATE_MEMORY] ERROR', err?.message || err, err?.stderr || '');
     return jsonError(res, 500, 'render_failed', err?.message || 'unknown_error');
