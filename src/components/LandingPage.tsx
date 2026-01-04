@@ -5,16 +5,16 @@ interface LandingPageProps {
 
 export default function LandingPage({ onStart, onNavigate }: LandingPageProps) {
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-b from-black via-gray-900 to-black overflow-hidden">
-      {/* Hero Section - Centered */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6">
-        <div className="max-w-2xl w-full text-center space-y-10">
-          <div className="space-y-6">
+    <div className="min-h-screen flex flex-col bg-gradient-to-b from-black via-gray-900 to-black">
+      {/* Hero Section - Centered with better spacing */}
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 lg:py-24">
+        <div className="max-w-2xl w-full text-center space-y-12 lg:space-y-16">
+          <div className="space-y-8">
             <div className="flex flex-col items-center justify-center">
               <img
                 src="/trace_logo_1k_v2_hy001.png"
                 alt="Trace"
-                className="w-80 h-80 lg:w-96 lg:h-96 object-contain"
+                className="w-64 h-64 lg:w-80 lg:h-80 object-contain"
               />
             </div>
 
@@ -24,11 +24,11 @@ export default function LandingPage({ onStart, onNavigate }: LandingPageProps) {
             </h1>
           </div>
 
-          <p className="text-lg text-gray-300 leading-relaxed max-w-lg mx-auto">
+          <p className="text-lg lg:text-xl text-gray-300 leading-relaxed max-w-lg mx-auto">
             Upload your photos. We'll create one quiet, cinematic memory that preserves how it felt.
           </p>
 
-          <div className="flex flex-col items-center space-y-4">
+          <div className="flex flex-col items-center space-y-6">
             <button
               onClick={onStart}
               className="group relative px-12 py-4 bg-white text-black text-base font-medium tracking-wide rounded-sm hover:bg-gray-100 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105"
@@ -45,39 +45,39 @@ export default function LandingPage({ onStart, onNavigate }: LandingPageProps) {
         </div>
       </div>
 
-      {/* Features Section - Below Hero */}
-      <div className="border-t border-gray-800/50 py-20 px-6">
+      {/* Features Section - Below Hero with better spacing */}
+      <div className="border-t border-gray-800/50 py-16 lg:py-24 px-6">
         <div className="max-w-6xl mx-auto">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-20">
-            <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700/30 rounded-lg p-6 hover:border-cyan-500/50 transition-all duration-300">
-              <div className="text-cyan-400 text-2xl mb-3">✨</div>
-              <h3 className="text-white font-medium mb-2">Cinematic Quality</h3>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-10 mb-24">
+            <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700/30 rounded-lg p-8 hover:border-cyan-500/50 transition-all duration-300">
+              <div className="text-cyan-400 text-3xl mb-4">✨</div>
+              <h3 className="text-white font-medium mb-3 text-lg">Cinematic Quality</h3>
               <p className="text-gray-400 text-sm leading-relaxed">Professional-grade video with smooth transitions and motion</p>
             </div>
             
-            <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700/30 rounded-lg p-6 hover:border-cyan-500/50 transition-all duration-300">
-              <div className="text-cyan-400 text-2xl mb-3">🎵</div>
-              <h3 className="text-white font-medium mb-2">Curated Music</h3>
+            <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700/30 rounded-lg p-8 hover:border-cyan-500/50 transition-all duration-300">
+              <div className="text-cyan-400 text-3xl mb-4">🎵</div>
+              <h3 className="text-white font-medium mb-3 text-lg">Curated Music</h3>
               <p className="text-gray-400 text-sm leading-relaxed">Perfect soundtrack selected to match your memories</p>
             </div>
             
-            <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700/30 rounded-lg p-6 hover:border-cyan-500/50 transition-all duration-300">
-              <div className="text-cyan-400 text-2xl mb-3">📸</div>
-              <h3 className="text-white font-medium mb-2">Smart Sequencing</h3>
+            <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700/30 rounded-lg p-8 hover:border-cyan-500/50 transition-all duration-300">
+              <div className="text-cyan-400 text-3xl mb-4">📸</div>
+              <h3 className="text-white font-medium mb-3 text-lg">Smart Sequencing</h3>
               <p className="text-gray-400 text-sm leading-relaxed">AI arranges your photos for the best storytelling flow</p>
             </div>
             
-            <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700/30 rounded-lg p-6 hover:border-cyan-500/50 transition-all duration-300">
-              <div className="text-cyan-400 text-2xl mb-3">⚡</div>
-              <h3 className="text-white font-medium mb-2">Fast & Simple</h3>
+            <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700/30 rounded-lg p-8 hover:border-cyan-500/50 transition-all duration-300">
+              <div className="text-cyan-400 text-3xl mb-4">⚡</div>
+              <h3 className="text-white font-medium mb-3 text-lg">Fast & Simple</h3>
               <p className="text-gray-400 text-sm leading-relaxed">Upload 6-36 photos and get your memory in minutes</p>
             </div>
           </div>
 
           {/* How It Works Section */}
-          <div className="border-t border-gray-800/50 pt-16">
-            <h2 className="text-2xl font-light text-white text-center mb-12">How It Works</h2>
-            <div className="grid md:grid-cols-3 gap-12 max-w-4xl mx-auto">
+          <div className="border-t border-gray-800/50 pt-20">
+            <h2 className="text-2xl font-light text-white text-center mb-16">How It Works</h2>
+            <div className="grid md:grid-cols-3 gap-12 lg:gap-16 max-w-4xl mx-auto">
               <div className="text-center space-y-4">
                 <div className="w-16 h-16 mx-auto bg-cyan-500/10 border border-cyan-500/30 rounded-full flex items-center justify-center">
                   <span className="text-2xl font-bold text-cyan-400">1</span>

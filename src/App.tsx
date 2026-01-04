@@ -53,7 +53,7 @@ function App() {
 
   return (
     <>
-      <Header onNavigate={handleNavigate} />
+      <Header onNavigate={handleNavigate} centered={true} />
       <LandingPage onStart={() => setCurrentPage('upload')} onNavigate={handleNavigate} />
     </>
   );
