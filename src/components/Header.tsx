@@ -38,7 +38,7 @@ export default function Header({ onNavigate }: HeaderProps) {
           <img
             src="/trace_logo_1k_v2_hy001.png"
             alt="TRACE"
-            className="w-12 h-12 object-contain opacity-90 group-hover:opacity-100 transition-opacity"
+            className="w-20 h-20 object-contain opacity-90 group-hover:opacity-100 transition-opacity"
           />
         </button>
       </nav>

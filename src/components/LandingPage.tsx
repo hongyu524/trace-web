@@ -5,9 +5,9 @@ interface LandingPageProps {
 
 export default function LandingPage({ onStart, onNavigate }: LandingPageProps) {
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-black via-gray-900 to-black">
+    <div className="h-screen flex flex-col bg-gradient-to-b from-black via-gray-900 to-black overflow-hidden">
       {/* Hero Section - Centered */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-20 lg:py-32">
+      <div className="flex-1 flex flex-col items-center justify-center px-6">
         <div className="max-w-2xl w-full text-center space-y-10">
           <div className="space-y-6">
             <div className="flex flex-col items-center justify-center">

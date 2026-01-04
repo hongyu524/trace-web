@@ -4,22 +4,25 @@ interface EnterprisePageProps {
 
 export default function EnterprisePage({ onBack }: EnterprisePageProps) {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-black via-gray-900 to-black">
-      <div className="max-w-4xl mx-auto px-6 py-16">
-        <button
-          onClick={onBack}
-          className="mb-8 text-gray-400 hover:text-white transition-colors flex items-center space-x-2"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          <span>Back</span>
-        </button>
+    <div className="h-screen flex flex-col bg-gradient-to-b from-black via-gray-900 to-black overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-6 py-8">
+          <div className="flex items-start justify-between mb-8">
+            <button
+              onClick={onBack}
+              className="text-gray-400 hover:text-white transition-colors flex items-center space-x-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              <span>Back</span>
+            </button>
+          </div>
 
-        <div className="mb-12">
-          <h1 className="text-4xl font-bold text-white mb-4">Enterprise</h1>
-          <p className="text-gray-400 text-lg">A product from Hesra</p>
-        </div>
+          <div className="mb-12">
+            <h1 className="text-4xl font-bold text-white mb-4">Enterprise</h1>
+            <p className="text-gray-400 text-lg">A product from Hesra</p>
+          </div>
 
         <div className="space-y-12">
           {/* About Hesra */}
@@ -125,6 +128,7 @@ export default function EnterprisePage({ onBack }: EnterprisePageProps) {
             </a>
           </section>
         </div>
+      </div>
       </div>
     </div>
   );
