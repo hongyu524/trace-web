@@ -813,13 +813,12 @@ async function muxAudioVideo(videoPath, audioPath, outputPath, videoDuration) {
 }
 
 /**
- * Easing function: easeInOutCubic (smooth, cinematic)
+ * Quintic smootherstep: jerk-limited S-curve (0..1 -> 0..1 with 0 vel/acc at ends)
+ * Closer to stabilized camera motion, removes "robotic ease" feeling
  */
-function easeInOutCubic(t) {
-  if (t < 0.5) {
-    return 4 * t * t * t;
-  }
-  return 1 - Math.pow(-2 * t + 2, 3) / 2;
+function smootherstep(t) {
+  t = Math.max(0, Math.min(1, t));
+  return t * t * t * (t * (t * 6 - 15) + 10);
 }
 
 /**
@@ -830,7 +829,9 @@ function clamp(v, min, max) {
 }
 
 /**
- * Build FFmpeg zoompan expression using FOCUS_THEN_MOVE camera plan
+ * Build FFmpeg zoompan expression using Documentary Gimbal Move plan
+ * 0.7s hard hold locked to focal point, then one move (push-in/pull-out/pan)
+ * Driven by quintic smootherstep (jerk-limited)
  * @param {Object} params
  * @param {number} params.startZoom - Starting zoom (1.0 = no zoom)
  * @param {number} params.endZoom - Ending zoom
@@ -838,50 +839,49 @@ function clamp(v, min, max) {
  * @param {number} params.focalY - Focal point Y (normalized 0..1)
  * @param {number} params.panOffsetX - Pan offset X (normalized -1..1)
  * @param {number} params.panOffsetY - Pan offset Y (normalized -1..1)
- * @param {number} params.holdFrac - Hold fraction (0.25 = 25% focus hold)
+ * @param {number} params.holdSeconds - Hold duration in seconds (0.7s hard hold)
  * @param {number} params.frames - Number of output frames
+ * @param {number} params.fps - Frame rate
  * @param {number} params.W - Output width
  * @param {number} params.H - Output height
  * @returns {string} FFmpeg zoompan filter string
  */
-function buildZoompanExpr({ startZoom, endZoom, focalX, focalY, panOffsetX, panOffsetY, holdFrac, frames, W, H }) {
-  // Phase split: hold frames for focus, then move
-  const holdFrames = Math.max(1, Math.floor(frames * holdFrac));
+function buildZoompanExpr({ startZoom, endZoom, focalX, focalY, panOffsetX, panOffsetY, holdSeconds, frames, fps, W, H }) {
+  // Phase split: 0.7s hard hold (absolute time), then move
+  const holdFrames = Math.max(1, Math.floor(holdSeconds * fps));
   const moveFrames = frames - holdFrames;
 
   // Eased progress during move phase only (0..1)
-  // During hold phase: tMove = 0
-  // During move phase: tMove = easeInOutCubic(progress)
+  // During hold phase: progress = 0
+  // During move phase: progress = smootherstep(u)
   const nMinus1 = Math.max(1, moveFrames - 1);
   const frameInMovePhase = `max(0, on - ${holdFrames})`;
   const tMoveRaw = `${frameInMovePhase} / ${nMinus1}`;
   const tMoveClamped = `min(1, max(0, ${tMoveRaw}))`;
   
-  // easeInOutCubic: t < 0.5 ? 4*t*t*t : 1 - pow(-2*t + 2, 3) / 2
-  const easeExpr = `if(lt(${tMoveClamped}, 0.5), 4 * ${tMoveClamped} * ${tMoveClamped} * ${tMoveClamped}, 1 - pow(-2 * ${tMoveClamped} + 2, 3) / 2)`;
+  // Quintic smootherstep: t*t*t*(t*(t*6 - 15) + 10)
+  // This provides jerk-limited S-curve with 0 velocity/acceleration at ends
+  const smootherstepExpr = `${tMoveClamped} * ${tMoveClamped} * ${tMoveClamped} * (${tMoveClamped} * (${tMoveClamped} * 6 - 15) + 10)`;
 
-  // Zoom curve: hold at startZoom, then ease to endZoom
-  const zoomExpr = `if(lt(on, ${holdFrames}), ${startZoom}, ${startZoom} + (${endZoom} - ${startZoom}) * ${easeExpr})`;
-
-  // Calculate headroom from zoom (available pan space)
-  // headroom = (zoom - 1) * dimension / 2
-  const headroomXExpr = `(${zoomExpr} - 1) * ${W} / 2`;
-  const headroomYExpr = `(${zoomExpr} - 1) * ${H} / 2`;
+  // Zoom curve: hold at startZoom during hold phase, then smootherstep to endZoom
+  const zoomExpr = `if(lt(on, ${holdFrames}), ${startZoom}, ${startZoom} + (${endZoom} - ${startZoom}) * ${smootherstepExpr})`;
 
   // Focal point in pixels (normalized to image dimensions)
-  // For zoompan, we work in the scaled image space
-  // Focal point: fx * iw, fy * ih
+  // Crop focuses on focal point first - locked during hold phase
   const focalPX = `${focalX} * iw`;
   const focalPY = `${focalY} * ih`;
 
-  // Pan offset (only applied during move phase, clamped to max 4%)
-  const MAX_PAN_NORM = 0.04;
-  const panDX = `${panOffsetX} * ${MAX_PAN_NORM} * iw`;
-  const panDY = `${panOffsetY} * ${MAX_PAN_NORM} * ih * 0.5`;
+  // Pan offset (only applied during move phase, clamped to 1-3% of frame width)
+  const MIN_PAN_NORM = 0.01;  // 1% minimum
+  const MAX_PAN_NORM = 0.03;  // 3% maximum
+  const panDistance = MIN_PAN_NORM + (MAX_PAN_NORM - MIN_PAN_NORM) * Math.abs(panOffsetX); // Scale based on panOffsetX magnitude
+  const panDX = `${panOffsetX} * ${panDistance} * iw`;
+  const panDY = `${panOffsetY} * ${panDistance} * ih * 0.5`;
 
-  // Center position: start at focal point, then apply subtle drift during move phase
-  const centerXExpr = `if(lt(on, ${holdFrames}), ${focalPX}, ${focalPX} + ${panDX} * (${easeExpr} - 0.5))`;
-  const centerYExpr = `if(lt(on, ${holdFrames}), ${focalPY}, ${focalPY} + ${panDY} * (${easeExpr} - 0.5))`;
+  // Center position: locked to focal point during hold phase (zero movement)
+  // Then apply subtle drift during move phase using smootherstep
+  const centerXExpr = `if(lt(on, ${holdFrames}), ${focalPX}, ${focalPX} + ${panDX} * ${smootherstepExpr})`;
+  const centerYExpr = `if(lt(on, ${holdFrames}), ${focalPY}, ${focalPY} + ${panDY} * ${smootherstepExpr})`;
 
   // Pan X/Y: center - output/2 (zoompan expects top-left corner)
   const panXExpr = `${centerXExpr} - ow / 2`;

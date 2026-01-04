@@ -71,12 +71,11 @@ export function generatePhase1Motions({ count, pack = 'default', aspectRatio = '
 
   const rng = new SeededRNG(seedValue);
 
-  // Premium defaults (no rotation, no jitter)
-  const Z_START = 1.02;            // start slightly "in" so subject feels established
-  const Z_END_PUSH = 1.05;         // max push-in (cap at 1.06 if needed)
+  // Documentary Gimbal Move defaults (no rotation, no jitter)
+  const Z_START = 1.035;           // start zoom (cap range: 1.035-1.055)
+  const Z_END_PUSH = 1.055;        // max push-in (cap at 1.055)
   const Z_END_PULL = 1.00;         // pull-out to full
-  const MAX_PAN_NORM = 0.04;       // 4% frame pan max (prevents amateur drifting)
-  const holdFrac = 0.25;           // 25% focus hold
+  const holdSeconds = 0.7;         // 0.7s hard hold locked to focal point
 
   // Move type distribution: 70% PUSH_IN, 20% PULL_OUT, 10% PAN
   const motions = [];
@@ -118,9 +117,9 @@ export function generatePhase1Motions({ count, pack = 'default', aspectRatio = '
       endZoom = Z_START; // Keep zoom fixed during pan
     }
 
-    // Pan offset (only for PAN type, clamped to max 4%)
-    const panOffsetX = moveType === 'PAN' ? panDirX * MAX_PAN_NORM : 0;
-    const panOffsetY = moveType === 'PAN' ? panDirY * MAX_PAN_NORM * 0.5 : 0;
+    // Pan offset (only for PAN type, will be clamped to 1-3% in buildZoompanExpr)
+    const panOffsetX = moveType === 'PAN' ? panDirX : 0;
+    const panOffsetY = moveType === 'PAN' ? panDirY * 0.5 : 0;
 
     motions.push({
       type: moveType,
@@ -128,9 +127,9 @@ export function generatePhase1Motions({ count, pack = 'default', aspectRatio = '
       endZoom,
       focalX,
       focalY,
-      panOffsetX, // Normalized pan offset (-1..1)
+      panOffsetX, // Normalized pan offset (-1..1), will be scaled to 1-3% in buildZoompanExpr
       panOffsetY,
-      holdFrac,
+      holdSeconds, // Absolute time in seconds (0.7s)
     });
   }
 
