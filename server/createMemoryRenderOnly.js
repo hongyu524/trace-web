@@ -1171,9 +1171,12 @@ async function createMemoryRenderOnly(req, res) {
     console.log(`[CREATE_MEMORY] framesDir = ${renderFramesDir}`);
     console.log(`[CREATE_MEMORY] ffmpeg start -> ${silentMp4}`);
     
-    // Log motion status (currently motion is not applied in renderSlideshow)
-    const motionPlanUsed = null; // Motion planning is not currently integrated
-    console.log('[RENDER] motionEnabled=', Boolean(motionPlanUsed), '(motion not currently applied to frames)');
+    // Phase 1 motion is enabled by default (can be disabled via motionPack='none' in future)
+    const motionEnabled = finalMotionPack !== 'none';
+    console.log('[RENDER] motionEnabled=', motionEnabled, 'motionPack=', finalMotionPack);
+    
+    // Generate seed for deterministic motion (use jobId hash)
+    const motionSeed = jobId;
     
     await renderSlideshow({
       framesDir: renderFramesDir,
@@ -1181,6 +1184,8 @@ async function createMemoryRenderOnly(req, res) {
       outPath: silentMp4,
       fps,
       aspectRatio,
+      motionPack: finalMotionPack,
+      motionSeed,
     });
 
     const silentStat = await fsp.stat(silentMp4);
