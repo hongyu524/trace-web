@@ -202,13 +202,14 @@ function generateDocumentaryMotionPlan(analysisResults, sequencePlan, outputWidt
     const rng = new documentaryPack.SeededRNG(seed);
     const preset = documentaryPack.pickDocumentaryPreset(shotMeta, rng, config);
     
-    // Convert documentary preset to motion parameters
+    // Convert documentary preset to motion parameters (pass motionPack='documentary' explicitly)
     const motionParams = documentaryPack.convertDocumentaryPresetToMotionParams(
       preset,
       outputWidth,
       outputHeight,
       seed,
-      config
+      config,
+      'documentary' // Explicitly pass motionPack='documentary' for documentary pack
     );
     
     // Map documentary preset name to movementType (lowercase)
