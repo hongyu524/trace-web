@@ -193,8 +193,16 @@ function getDocumentaryTransformAt(t, preset, params) {
       // Use easeInOutSine for very mild easing
       const eased = easeInOutSine(t);
       scale = 1.0 + (endScale - 1.0) * eased;
-      translateX = 0;
-      translateY = 0;
+      // Allow subtle translation for documentary (up to 1.5% of frame)
+      const motionPack = params.motionPack || 'documentary';
+      if (motionPack === 'documentary') {
+        const panPercent = rng.nextFloat(-1.5, 1.5); // Small pan during push
+        translateX = (params.frameWidth * panPercent * t) / 100;
+        translateY = 0;
+      } else {
+        translateX = 0;
+        translateY = 0;
+      }
       break;
     }
 
@@ -216,8 +224,9 @@ function getDocumentaryTransformAt(t, preset, params) {
       let driftPx = (params.frameWidth * driftPercent) / 100;
       // Linear movement from 0 to -driftPx
       driftPx = -driftPx * t;
-      // Clamp drift to prevent black edge reveal
-      translateX = clampDriftForScale(driftPx, params.frameWidth, scale);
+      // Clamp drift to prevent black edge reveal (pass motionPack if available)
+      const motionPack = params.motionPack || 'documentary'; // Default to documentary for documentary pack
+      translateX = clampDriftForScale(driftPx, params.frameWidth, scale, motionPack);
       translateY = 0;
       break;
     }
@@ -225,13 +234,14 @@ function getDocumentaryTransformAt(t, preset, params) {
     case 'LATERAL_DRIFT_R': {
       // Fixed scale: slightly zoomed to avoid edge reveal (min 1.02 for drift safety)
       scale = rng.nextFloat(Math.max(1.02, cfg.minScale), cfg.maxScale);
-      // translateX: positive drift (right), 0.8% to 2.0% of frame width
+      // translateX: positive drift (right), 0.8% to maxDriftPercent% of frame width
       const driftPercent = rng.nextFloat(cfg.minDriftPercent, cfg.maxDriftPercent);
       let driftPx = (params.frameWidth * driftPercent) / 100;
       // Linear movement from 0 to +driftPx
       driftPx = driftPx * t;
-      // Clamp drift to prevent black edge reveal
-      translateX = clampDriftForScale(driftPx, params.frameWidth, scale);
+      // Clamp drift to prevent black edge reveal (pass motionPack if available)
+      const motionPack = params.motionPack || 'documentary'; // Default to documentary for documentary pack
+      translateX = clampDriftForScale(driftPx, params.frameWidth, scale, motionPack);
       translateY = 0;
       break;
     }
