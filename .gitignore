@@ -68,3 +68,13 @@ scripts/list-routes.js
 *.mov
 *.webm
 # Runtime artifacts (already covered by server/ paths above)
+
+# Music pack files
+assets/music_pack/*.mp3
+**/music_pack/*.mp3
+
+# Recovery codes
+**/*recovery-codes*.txt
+**/github-recovery-codes.txt
+recovery-codes*.txt
+github-recovery-codes.txt

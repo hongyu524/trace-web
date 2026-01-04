@@ -426,9 +426,9 @@ function findLogoPath() {
   
   const logoName = 'Trace_Logo_1K_v2_hy001.png';
   const possiblePaths = [
-    path.join(process.cwd(), 'assets', logoName),
+    path.join(__dirname, 'assets', logoName), // Check server/assets first (recommended)
     path.join(process.cwd(), 'server', 'assets', logoName),
-    path.join(__dirname, 'assets', logoName),
+    path.join(process.cwd(), 'assets', logoName),
     path.join(__dirname, '..', 'assets', logoName),
   ];
   
@@ -1064,17 +1064,45 @@ async function createMemoryRenderOnly(req, res) {
     let videoDuration = await getVideoDuration(silentMp4);
     console.log(`[VIDEO] Silent video duration=${videoDuration.toFixed(2)}s`);
     
-    // Validate output with ffprobe
+    // Validate output with ffprobe (using centralized duration calculation)
     console.log(`[CREATE_MEMORY] ========================================`);
     console.log(`[CREATE_MEMORY] OUTPUT_VALIDATION_START`);
     const outputN = orderedKeys.length;
-    const outputXfade = 0.35;
-    const outputTargetDuration = Math.max(12, Math.min(30, outputN * 1.7));
-    // Correct xfade overlap formula: hold = (targetDuration - xf) / N
-    const outputHold = Math.max(0.9, (outputTargetDuration - outputXfade) / outputN);
-    // Correct xfade overlap formula: expectedTotalSeconds = N * hold + xf
-    const expectedTotalSeconds = outputN * outputHold + outputXfade;
-    const expectedMinDuration = expectedTotalSeconds - 0.5;
+    
+    // Centralized duration calculation (single source of truth)
+    function calculateVideoDuration(imageCount, fps) {
+      const N = imageCount;
+      const xf = 0.35; // Crossfade duration in seconds
+      const targetDuration = Math.max(12, Math.min(30, N * 1.7));
+      // Correct formula: hold = (targetDuration - xf) / N
+      const hold = Math.max(0.9, (targetDuration - xf) / N);
+      const clipDur = hold + xf;
+      
+      // Calculate cumulative offsets for xfade transitions
+      const offsets = [];
+      for (let i = 0; i < N - 1; i++) {
+        const offset = (i + 1) * hold + i * xf;
+        offsets.push(offset);
+      }
+      
+      // Expected total duration (xfade overlap model: N * hold + xf)
+      const expectedTotalSeconds = N * hold + xf;
+      const expectedMinDuration = expectedTotalSeconds - 0.5;
+      
+      return {
+        N,
+        xf,
+        targetDuration,
+        hold,
+        clipDur,
+        offsets,
+        expectedTotalSeconds,
+        expectedMinDuration,
+      };
+    }
+    
+    const durationPlan = calculateVideoDuration(outputN, fps);
+    const { xf: outputXfade, targetDuration: outputTargetDuration, hold: outputHold, expectedTotalSeconds, expectedMinDuration, offsets } = durationPlan;
     
     // Calculate offsets for error reporting
     const offsets = [];
@@ -1088,6 +1116,9 @@ async function createMemoryRenderOnly(req, res) {
     
     // Re-check duration after padding
     videoDuration = await getVideoDuration(silentMp4);
+    
+    // Log duration comparison
+    console.log(`[DURATION] expected=${expectedTotalSeconds.toFixed(2)} actual=${videoDuration.toFixed(2)} images=${outputN} fps=${fps}`);
     
     // Fail if duration is too short (with small tolerance for ffprobe rounding)
     if (videoDuration < expectedMinDuration - 0.15) {

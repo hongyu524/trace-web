@@ -112,6 +112,9 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
       setProgress({ percent: 30, step: "analyzing", detail: "Determining optimal image sequence..." });
       
       console.log('[UploadFlow] Calling Vercel: /api/sequence');
+      console.log('[UI] selectedFiles=', files.length);
+      console.log('[UI] uploadedKeys=', photoKeys.length);
+      
       let optimalOrder: number[];
       try {
         const seq = await getSequenceOrder({
@@ -135,15 +138,28 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
         return; // Stop execution on sequence API failure
       }
 
+      // Apply sequence order to photoKeys and create ordered arrays
+      const orderedKeys = optimalOrder.map(i => photoKeys[i]);
+      const orderedFiles = optimalOrder.map(i => files[i]);
+      const orderedPreviews = optimalOrder.map(i => filePreviews[i]);
+      
+      // Update UI state to reflect ordered sequence
+      setFiles(orderedFiles);
+      setFilePreviews(orderedPreviews);
+      
+      console.log('[UploadFlow] Applied order to photoKeys and UI');
+      console.log('[UploadFlow] orderedKeys.length =', orderedKeys.length);
+      console.log('[UploadFlow] orderedKeys.first3 =', orderedKeys.slice(0, 3));
+
       // Step 3: Render video via Railway /api/create-memory
       setProgress({ percent: 50, step: "rendering", detail: "Creating your memory video..." });
       
       // Comprehensive logging before render request
       console.log('[CREATE_MEMORY] ========================================');
       console.log('[CREATE_MEMORY] FRONTEND_REQUEST_START');
-      console.log('[CREATE_MEMORY] photoKeys.length =', photoKeys.length);
-      console.log('[CREATE_MEMORY] photoKeys.first3 =', photoKeys.slice(0, 3));
-      console.log('[CREATE_MEMORY] photoKeys.last3 =', photoKeys.slice(-3));
+      console.log('[CREATE_MEMORY] photoKeys.length =', orderedKeys.length);
+      console.log('[CREATE_MEMORY] photoKeys.first3 =', orderedKeys.slice(0, 3));
+      console.log('[CREATE_MEMORY] photoKeys.last3 =', orderedKeys.slice(-3));
       console.log('[CREATE_MEMORY] aspectRatio =', outputRatio);
       console.log('[CREATE_MEMORY] fps =', fps);
       console.log('[CREATE_MEMORY] order.length =', optimalOrder.length);
@@ -153,8 +169,8 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
       
       const motionPack = 'documentary'; // TODO: Add UI selector for motion pack
       const requestBody = {
-        photoKeys,
-        order: optimalOrder,
+        photoKeys: orderedKeys, // Send ordered keys
+        order: optimalOrder, // Keep sending order for debugging
         aspectRatio: outputRatio,
         fps,
         context: promptText.trim() || undefined,
