@@ -325,19 +325,18 @@ export function getDocumentaryTransformAt(
 
     case 'LATERAL_DRIFT_L':
     case 'LATERAL_DRIFT_R': {
-      // Coupled zoom-pan: calculate required scale from drift distance
-      const startScale = cfg.driftMinScale;
+      // Coupled zoom-pan: compute required endScale from requested drift distance
       const isLeft = preset === 'LATERAL_DRIFT_L';
       
       // Select drift percentage (premium range: 0.4%-1.2%)
-      const desiredDriftPercent = rng.nextFloat(cfg.minDriftPercent, cfg.maxDriftPercent);
+      let desiredDriftPercent = rng.nextFloat(cfg.minDriftPercent, cfg.maxDriftPercent);
       let desiredDriftPx = (params.frameWidth * desiredDriftPercent) / 100;
       
       // Calculate required end scale from pan distance (overscan rule):
-      // requiredEndScale = 1 + 2*(absPanPx + safetyPx)/frameWidth
+      // requiredEndScale = 1 + 2*(absDriftPx + safetyPx)/frameWidth
       let requiredEndScale = 1 + (2 * (desiredDriftPx + safetyMarginPx)) / params.frameWidth;
       
-      // If requiredEndScale exceeds 1.06, reduce driftPercent to fit
+      // If requiredEndScale exceeds 1.06, reduce driftPercent until it fits
       let endScale: number;
       let actualDriftPx: number;
       
@@ -347,18 +346,27 @@ export function getDocumentaryTransformAt(
         actualDriftPx = Math.min(desiredDriftPx, maxDriftPx);
         endScale = cfg.driftMaxScale;
       } else {
-        // Use calculated scale (clamped to safe range)
+        // Clamp endScale to [1.03, 1.06] premium safe range
         endScale = clamp(requiredEndScale, cfg.driftMinScale, cfg.driftMaxScale);
         actualDriftPx = desiredDriftPx;
       }
       
       // Use docProgress for continuous motion from frame 1 (no hold/pause)
-      // Same eased progress for scale and translate
       const eased = docProgress(t);
       
-      // Interpolate scale and pan with same eased progress
-      scale = startScale + (endScale - startScale) * eased;
-      translateX = isLeft ? -actualDriftPx * eased : actualDriftPx * eased;
+      // Scale ramps with same eased progress: scale(t) = 1 + (endScale - 1)*docProgress(t)
+      // Start at scale 1.0, ramp to endScale
+      scale = 1.0 + (endScale - 1.0) * eased;
+      
+      // Translate uses same eased progress, constrained by overscan rule
+      // overscanPerSidePx = ((scale - 1) * frameWidth) / 2
+      // abs(translateX) <= overscanPerSidePx - safetyPx
+      const currentOverscanPerSide = ((scale - 1) * params.frameWidth) / 2;
+      const maxTranslateAtCurrentScale = Math.max(0, currentOverscanPerSide - safetyMarginPx);
+      
+      // Apply drift with eased progress, clamped to current scale's overscan limit
+      const rawTranslateX = isLeft ? -actualDriftPx * eased : actualDriftPx * eased;
+      translateX = clamp(rawTranslateX, -maxTranslateAtCurrentScale, maxTranslateAtCurrentScale);
       translateY = 0;
       break;
     }
@@ -384,17 +392,20 @@ export function getDocumentaryTransformAt(
   }
 
   // Final safety clamps based on config (not hard-coded)
-  // Scale: clamp to maxScale (or driftMaxScale for drift presets)
+  // Scale: clamp to config limits
   const maxScaleForPreset = 
     preset === 'LATERAL_DRIFT_L' || preset === 'LATERAL_DRIFT_R' 
       ? cfg.driftMaxScale 
       : cfg.maxScale;
   scale = Math.max(1.0, Math.min(maxScaleForPreset, scale));
   
-  // Translate: ensure it doesn't exceed overscan limits
-  const maxPanAtScale = calculateMaxPanAtScale(scale, params.frameWidth, safetyMarginPx);
-  translateX = clamp(translateX, -maxPanAtScale, maxPanAtScale);
-  translateY = clamp(translateY, -maxPanAtScale, maxPanAtScale);
+  // Translate: ensure it doesn't exceed overscan limits (derived from current scale, not hard-coded)
+  // overscanPerSidePx = ((scale - 1) * frameWidth) / 2
+  // abs(translateX) <= overscanPerSidePx - safetyPx
+  const currentOverscanPerSide = ((scale - 1) * params.frameWidth) / 2;
+  const maxTranslateAtScale = Math.max(0, currentOverscanPerSide - safetyMarginPx);
+  translateX = clamp(translateX, -maxTranslateAtScale, maxTranslateAtScale);
+  translateY = clamp(translateY, -maxTranslateAtScale, maxTranslateAtScale);
 
   return {
     scale,
