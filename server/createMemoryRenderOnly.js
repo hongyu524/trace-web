@@ -1250,6 +1250,8 @@ async function createMemoryRenderOnly(req, res) {
     progressStore.set(jobId, { percent: 88, step: 'rendering', detail: 'Applying video effects...' });
     const videoWithFades = path.join(outDir, 'video_with_fades.mp4');
     await applyFades(silentMp4, videoWithFades, videoDuration);
+    
+    // Music muxing stage
     progressStore.set(jobId, { percent: 92, step: 'rendering', detail: 'Adding music...' });
 
     // Music muxing (with audio fades)
@@ -1266,8 +1268,10 @@ async function createMemoryRenderOnly(req, res) {
         // Mux audio and video (with audio fades)
         finalMp4 = path.join(outDir, 'final_with_music.mp4');
         console.log('[MUSIC] Starting mux...');
+        progressStore.set(jobId, { percent: 94, step: 'rendering', detail: 'Muxing audio and video...' });
         await muxAudioVideo(videoWithFades, musicPath, finalMp4, videoDuration);
         console.log('[MUSIC] Mux complete');
+        progressStore.set(jobId, { percent: 96, step: 'rendering', detail: 'Music added successfully...' });
 
         // Verify audio stream exists
         const hasAudio = await ffprobeHasAudio(finalMp4);
@@ -1336,6 +1340,7 @@ async function createMemoryRenderOnly(req, res) {
     
     if (enableEndCap) {
       try {
+        progressStore.set(jobId, { percent: 97, step: 'rendering', detail: 'Adding end card...' });
         const endCapMp4 = path.join(outDir, 'final_with_endcap.mp4');
         console.log('[ENDCAP] Starting end cap append...');
         await appendEndCap(finalMp4, endCapMp4);
@@ -1344,6 +1349,7 @@ async function createMemoryRenderOnly(req, res) {
         await fsp.rename(endCapMp4, finalMp4);
         const endCapStat = await fsp.stat(finalMp4);
         console.log(`[ENDCAP] Final video with end cap size=${endCapStat.size} bytes`);
+        progressStore.set(jobId, { percent: 98, step: 'rendering', detail: 'End card added...' });
       } catch (endCapError) {
         console.error('[ENDCAP] Failed to append end cap:', endCapError.message);
         console.error('[ENDCAP] Falling back to original video (no end cap)');
