@@ -69,6 +69,24 @@ export function generatePhase1Motions({ count, pack = 'default', aspectRatio = '
     seedValue = Math.abs(hash);
   }
 
+  // Static mode: no motion, just still images with focal crop
+  if (pack === 'none' || pack === 'static') {
+    const motions = [];
+    for (let i = 0; i < count; i++) {
+      motions.push({
+        type: 'STATIC',
+        startZoom: 1.0,
+        endZoom: 1.0,
+        focalX: 0.5,
+        focalY: 0.5,
+        panOffsetX: 0,
+        panOffsetY: 0,
+        holdSeconds: 0,
+      });
+    }
+    return motions;
+  }
+
   const rng = new SeededRNG(seedValue);
 
   // Documentary Gimbal Move defaults (no rotation, no jitter)

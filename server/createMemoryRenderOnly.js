@@ -1449,9 +1449,10 @@ async function createMemoryRenderOnly(req, res) {
     console.log(`[CREATE_MEMORY] framesDir = ${renderFramesDir}`);
     console.log(`[CREATE_MEMORY] ffmpeg start -> ${silentMp4}`);
     
-    // Phase 1 motion is enabled by default (can be disabled via motionPack='none' in future)
-    const motionEnabled = finalMotionPack !== 'none';
-    console.log('[RENDER] motionEnabled=', motionEnabled, 'motionPack=', finalMotionPack);
+    // Disable motion: use 'none' pack for still images with focal crop only
+    const motionEnabled = false; // Motion disabled - static images only
+    const staticMotionPack = 'none'; // Use 'none' pack for static mode
+    console.log('[RENDER] motionEnabled=', motionEnabled, 'motionPack=', staticMotionPack, '(static mode - focal crop only)');
     
     // Generate seed for deterministic motion (use jobId hash)
     const motionSeed = jobId;
@@ -1465,7 +1466,7 @@ async function createMemoryRenderOnly(req, res) {
         outPath: silentMp4,
         fps,
         aspectRatio,
-        motionPack: finalMotionPack,
+        motionPack: staticMotionPack, // Use 'none' for static images
         motionSeed,
       });
       const renderElapsed = Date.now() - renderStartTime;
