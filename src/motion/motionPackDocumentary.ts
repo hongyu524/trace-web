@@ -117,7 +117,7 @@ export function getDocumentaryDefaults(): DocumentaryMotionConfig {
   return {
     staticWeight: 0.0,         // 0% static (gallery mode: all shots have motion)
     pushInWeight: 0.70,        // 70% push-in (default motion type)
-    driftWeight: 0.30,         // 30% drift (25% driftX, 5% driftY - handled in preset selection)
+    driftWeight: 0.25,         // 25% driftX (horizontal only, split 50/50 L/R)
     pullBackWeight: 0.0,       // 0% pull-back (gallery mode: no pull-back)
     parallaxWeight: 0.0,       // 0% parallax (not supported)
     transitionDuration: 0.4,   // 400ms cross-dissolve
