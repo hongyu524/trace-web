@@ -1,7 +1,7 @@
 /**
- * Phase 1 Motion Generator
- * Lightweight per-image motion specs for Ken Burns effect
- * No dependency on analysis results or sequence planning
+ * FOCUS_THEN_MOVE Motion Generator
+ * 2-phase camera plan: Focus hold (20-30%) then smooth move (70-80%)
+ * No rotation, no jitter, premium cinematic feel
  */
 
 /**
@@ -28,166 +28,111 @@ class SeededRNG {
 }
 
 /**
- * Generate Phase 1 motion specs for image segments
+ * Easing function: easeInOutCubic (smooth, cinematic)
+ */
+function easeInOutCubic(t) {
+  if (t < 0.5) {
+    return 4 * t * t * t;
+  }
+  return 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+/**
+ * Clamp helper
+ */
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
+
+/**
+ * Generate FOCUS_THEN_MOVE motion specs for image segments
  * @param {Object} options
  * @param {number} options.count - Number of images
  * @param {string} options.pack - Motion pack ('documentary' or 'default')
- * @param {string} options.aspectRatio - Aspect ratio (for future use)
- * @param {number} options.fps - Frame rate (for future use)
- * @param {string} options.seed - Optional seed string for determinism (default: deterministic based on count)
- * @returns {Array} Array of motion specs
+ * @param {string} options.aspectRatio - Aspect ratio
+ * @param {number} options.fps - Frame rate
+ * @param {string} options.seed - Optional seed string for determinism
+ * @returns {Array} Array of motion specs with FOCUS_THEN_MOVE plan
  */
 export function generatePhase1Motions({ count, pack = 'default', aspectRatio = '16:9', fps = 24, seed = null }) {
   // Generate deterministic seed if not provided
   let seedValue = seed;
   if (!seedValue) {
-    // Use a simple hash of count + pack for determinism
     seedValue = (count * 7919 + (pack === 'documentary' ? 12345 : 67890)) % 2147483647;
   } else if (typeof seedValue === 'string') {
-    // Hash string seed
     let hash = 0;
     for (let i = 0; i < seedValue.length; i++) {
       const char = seedValue.charCodeAt(i);
       hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32-bit integer
+      hash = hash & hash;
     }
     seedValue = Math.abs(hash);
   }
 
   const rng = new SeededRNG(seedValue);
 
-  // Pack-specific defaults
-  const config = pack === 'documentary' ? {
-    staticWeight: 0.10,
-    pushInWeight: 0.40,
-    driftWeight: 0.40,
-    pullBackWeight: 0.10,
-    maxScale: 1.06,
-    driftMax: 0.0075, // Reduced to 0.75% of frame (was 1.5%) for subtle, smooth drift
-  } : {
-    staticWeight: 0.50,
-    pushInWeight: 0.40,
-    driftWeight: 0.08,
-    pullBackWeight: 0.02,
-    maxScale: 1.035,
-    driftMax: 0.005, // Reduced to 0.5% of frame for subtle motion
-  };
+  // Premium defaults (no rotation, no jitter)
+  const Z_START = 1.02;            // start slightly "in" so subject feels established
+  const Z_END_PUSH = 1.05;         // max push-in (cap at 1.06 if needed)
+  const Z_END_PULL = 1.00;         // pull-out to full
+  const MAX_PAN_NORM = 0.04;       // 4% frame pan max (prevents amateur drifting)
+  const holdFrac = 0.25;           // 25% focus hold
 
+  // Move type distribution: 70% PUSH_IN, 20% PULL_OUT, 10% PAN
   const motions = [];
-  let previousType = null;
-  let previousPreviousType = null;
 
   for (let i = 0; i < count; i++) {
-    const position = i / Math.max(1, count - 1); // 0.0 to 1.0
-
-    // Pick motion type (avoid same type twice in a row for drift/pull_back)
-    let type;
     const roll = rng.next();
-
-    // Build cumulative weights
-    let cumulative = 0;
-    const weights = [
-      { type: 'static', weight: config.staticWeight },
-      { type: 'push_in', weight: config.pushInWeight },
-      { type: 'drift', weight: config.driftWeight },
-      { type: 'pull_back', weight: config.pullBackWeight },
-    ];
-
-    // Adjust weights based on previous types (prevent direction flips)
-    let adjustedWeights = [...weights];
-    if (previousType === 'drift') {
-      // Reduce drift weight if previous was drift (prevent consecutive drifts)
-      adjustedWeights = adjustedWeights.map(w => 
-        w.type === 'drift' ? { ...w, weight: w.weight * 0.3 } : w
-      );
-    }
-    if (previousType === 'pull_back') {
-      // Reduce pull_back weight if previous was pull_back
-      adjustedWeights = adjustedWeights.map(w => 
-        w.type === 'pull_back' ? { ...w, weight: w.weight * 0.3 } : w
-      );
-    }
-    if (previousPreviousType === 'drift' && previousType === 'drift') {
-      // Prefer static after two drifts
-      adjustedWeights = adjustedWeights.map(w => 
-        w.type === 'static' ? { ...w, weight: w.weight * 1.5 } : w
-      );
-    }
     
-    // Prevent drift direction flips: if previous was drift, prefer static or opposite-direction drift
-    // (This is handled by reducing consecutive drift weight above)
-
-    // Normalize weights
-    const totalWeight = adjustedWeights.reduce((sum, w) => sum + w.weight, 0);
-    adjustedWeights = adjustedWeights.map(w => ({ ...w, weight: w.weight / totalWeight }));
-
-    // Select type
-    for (const { type: t, weight } of adjustedWeights) {
-      cumulative += weight;
-      if (roll <= cumulative) {
-        type = t;
-        break;
-      }
+    // Determine move type
+    let moveType;
+    if (roll < 0.70) {
+      moveType = 'PUSH_IN';
+    } else if (roll < 0.90) {
+      moveType = 'PULL_OUT';
+    } else {
+      moveType = 'PAN';
     }
-    if (!type) type = 'static'; // Fallback
 
-    // Generate motion params based on type
-    let startScale, endScale, driftX, driftY;
+    // Focal point: rule-of-thirds center bias (deterministic, no randomization)
+    // fx = 0.5w, fy = 0.45h (slightly above center feels like "face/subject first")
+    const focalX = 0.5;
+    const focalY = 0.45;
 
-    switch (type) {
-      case 'static':
-        startScale = 1.0;
-        endScale = 1.0;
-        driftX = 0;
-        driftY = 0;
-        break;
+    // Pan direction for PAN type (deterministic based on index, no random flips)
+    // Use index to create subtle variation without randomness
+    const panAngle = (i * 137.5) % 360; // Golden angle for even distribution
+    const panDirX = Math.cos((panAngle * Math.PI) / 180);
+    const panDirY = Math.sin((panAngle * Math.PI) / 180);
 
-      case 'push_in':
-        startScale = 1.0;
-        endScale = 1.0 + rng.nextFloat(0.01, config.maxScale - 1.0);
-        driftX = 0;
-        driftY = 0;
-        break;
-
-      case 'drift':
-        // Fixed scale (slightly zoomed to avoid edge reveal)
-        const driftScale = 1.0 + rng.nextFloat(0.02, config.maxScale - 1.0);
-        startScale = driftScale;
-        endScale = driftScale;
-        // Random drift direction
-        const angle = rng.nextFloat(0, Math.PI * 2);
-        const driftAmount = rng.nextFloat(0.005, config.driftMax);
-        driftX = Math.cos(angle) * driftAmount;
-        driftY = Math.sin(angle) * driftAmount;
-        break;
-
-      case 'pull_back':
-        startScale = 1.0 + rng.nextFloat(0.01, config.maxScale - 1.0);
-        endScale = 1.0;
-        driftX = 0;
-        driftY = 0;
-        break;
-
-      default:
-        startScale = 1.0;
-        endScale = 1.0;
-        driftX = 0;
-        driftY = 0;
+    // Compute zoom range based on move type
+    let startZoom, endZoom;
+    if (moveType === 'PUSH_IN') {
+      startZoom = Z_START;
+      endZoom = Z_END_PUSH;
+    } else if (moveType === 'PULL_OUT') {
+      startZoom = Z_END_PUSH; // Start zoomed in
+      endZoom = Z_END_PULL;
+    } else { // PAN
+      startZoom = Z_START;
+      endZoom = Z_START; // Keep zoom fixed during pan
     }
+
+    // Pan offset (only for PAN type, clamped to max 4%)
+    const panOffsetX = moveType === 'PAN' ? panDirX * MAX_PAN_NORM : 0;
+    const panOffsetY = moveType === 'PAN' ? panDirY * MAX_PAN_NORM * 0.5 : 0;
 
     motions.push({
-      type,
-      startScale,
-      endScale,
-      driftX, // normalized -1..1 (percentage direction)
-      driftY,
+      type: moveType,
+      startZoom,
+      endZoom,
+      focalX,
+      focalY,
+      panOffsetX, // Normalized pan offset (-1..1)
+      panOffsetY,
+      holdFrac,
     });
-
-    // Update previous types
-    previousPreviousType = previousType;
-    previousType = type;
   }
 
   return motions;
 }
-

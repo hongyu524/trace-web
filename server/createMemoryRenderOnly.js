@@ -968,22 +968,25 @@ async function renderSlideshow({
   // Log per-segment timing for verification
   console.log(`[PLAN] clipDur=${clipDur.toFixed(3)}s segmentFrames=${segmentFrames} xfadeFrames=${xfadeFrames} hold=${hold.toFixed(3)}s xfade=${xf.toFixed(3)}s`);
   
-  // Process each input image: apply motion via zoompan, then format
+  // Process each input image: apply FOCUS_THEN_MOVE motion via zoompan, then format
   for (let i = 0; i < N; i++) {
     const motion = motions[i];
     
     // Scale source to base size (larger than output to allow zoom)
-    // Use output dimensions * maxScale to ensure we have headroom
-    const baseScale = Math.max(motion.startScale, motion.endScale, 1.05);
-    const baseWidth = Math.round(width * baseScale);
-    const baseHeight = Math.round(height * baseScale);
+    // Use output dimensions * maxZoom to ensure we have headroom
+    const maxZoom = Math.max(motion.startZoom, motion.endZoom, 1.06);
+    const baseWidth = Math.round(width * maxZoom);
+    const baseHeight = Math.round(height * maxZoom);
     
-    // Build zoompan expression
+    // Build zoompan expression using FOCUS_THEN_MOVE plan
     const zoompanExpr = buildZoompanExpr({
-      startScale: motion.startScale,
-      endScale: motion.endScale,
-      driftX: motion.driftX,
-      driftY: motion.driftY,
+      startZoom: motion.startZoom,
+      endZoom: motion.endZoom,
+      focalX: motion.focalX,
+      focalY: motion.focalY,
+      panOffsetX: motion.panOffsetX,
+      panOffsetY: motion.panOffsetY,
+      holdFrac: motion.holdFrac,
       frames: segmentFrames,
       W: width,
       H: height,
@@ -991,10 +994,10 @@ async function renderSlideshow({
     
     // Log segment motion (sample a few)
     if (i < 3 || i >= N - 1) {
-      console.log(`[MOTION-PHASE1] seg#${i} type=${motion.type} scale ${motion.startScale.toFixed(2)}→${motion.endScale.toFixed(2)} driftX=${motion.driftX.toFixed(3)} driftY=${motion.driftY.toFixed(3)} duration=${clipDur.toFixed(2)}s`);
+      console.log(`[FOCUS_THEN_MOVE] seg#${i} type=${motion.type} zoom ${motion.startZoom.toFixed(3)}→${motion.endZoom.toFixed(3)} focal=(${motion.focalX.toFixed(2)},${motion.focalY.toFixed(2)}) pan=(${motion.panOffsetX.toFixed(3)},${motion.panOffsetY.toFixed(3)}) duration=${clipDur.toFixed(2)}s`);
     }
     
-    // Process image: scale to base, apply zoompan motion, crop to output, set fps and format
+    // Process image: scale to base, apply zoompan motion (no rotation), crop to output, set fps and format
     // Note: zoompan outputs exactly 'd' frames, so we don't need loop/trim
     filterParts.push(
       `[${i}:v]scale=${baseWidth}:${baseHeight}:force_original_aspect_ratio=increase,` +
