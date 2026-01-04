@@ -1137,14 +1137,25 @@ async function createMemoryRenderOnly(req, res) {
     // End cap policy enforcement (server-side, authoritative)
     // Free users: FORCED ON (no override)
     // Premium users: OPTIONAL (can disable via endCap: false)
-    const userPlan = req.body?.plan || 'free'; // Default to 'free' if not specified
-    const isPremium = userPlan === 'premium';
+    
+    // Verify user plan from Authorization token (authoritative source)
+    const authHeader = req.headers.authorization;
+    const userPlanInfo = await verifyUserPlan(authHeader);
+    const verifiedPlan = userPlanInfo.plan; // 'free' or 'premium' (from Firebase)
+    const isPremium = verifiedPlan === 'premium';
+    
+    // Log client-claimed plan for debugging (not trusted for enforcement)
+    const clientClaimedPlan = req.body?.plan;
+    if (clientClaimedPlan && clientClaimedPlan !== verifiedPlan) {
+      console.log(`[AUTH] Plan mismatch: client claimed=${clientClaimedPlan} verified=${verifiedPlan} uid=${userPlanInfo.uid || 'none'}`);
+    }
+    
     const requestedEndCap = req.body?.endCap; // true, false, or undefined
     
     // Determine if end cap should be enabled
     let enableEndCap;
     if (process.env.TRACE_ENDCAP === '0') {
-      // Admin/debug override: disable for all (unless explicitly enabled for premium)
+      // Admin/debug override: disable for all
       enableEndCap = false;
       console.log('[ENDCAP] Admin override: TRACE_ENDCAP=0 (disabled for all)');
     } else if (isPremium) {
