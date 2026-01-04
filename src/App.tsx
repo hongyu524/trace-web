@@ -54,7 +54,7 @@ function App() {
   return (
     <>
       <Header onNavigate={handleNavigate} />
-      <LandingPage onStart={() => setCurrentPage('upload')} />
+      <LandingPage onStart={() => setCurrentPage('upload')} onNavigate={handleNavigate} />
     </>
   );
 }
