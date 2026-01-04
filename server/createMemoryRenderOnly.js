@@ -1214,12 +1214,6 @@ async function createMemoryRenderOnly(req, res) {
       offsets.push((i + 1) * outputHold + i * outputXf);
     }
     
-    // Calculate offsets for error reporting
-    const offsets = [];
-    for (let i = 0; i < outputN - 1; i++) {
-      offsets.push((i + 1) * outputHold + i * outputXfade);
-    }
-    
     // Ensure minimum duration by padding if needed
     const padResult = await ensureMinDurationMp4(silentMp4, expectedMinDuration);
     console.log('[DURATION_GUARD]', { minDurationSeconds: expectedMinDuration, ...padResult });
@@ -1233,7 +1227,7 @@ async function createMemoryRenderOnly(req, res) {
     // Fail if duration is too short (with small tolerance for ffprobe rounding)
     if (videoDuration < expectedMinDuration - 0.15) {
       console.error(`[CREATE_MEMORY] OUTPUT_VALIDATION_FAILED: videoDuration=${videoDuration.toFixed(2)}s < expectedMin=${expectedMinDuration.toFixed(2)}s for N=${outputN}`);
-      console.error(`[CREATE_MEMORY] DURATION_TOO_SHORT: actual=${videoDuration.toFixed(2)}s target=${outputTargetDuration.toFixed(2)}s expectedTotal=${expectedTotalSeconds.toFixed(2)}s hold=${outputHold.toFixed(2)}s xfade=${outputXfade}s`);
+      console.error(`[CREATE_MEMORY] DURATION_TOO_SHORT: actual=${videoDuration.toFixed(2)}s target=${outputTargetDuration.toFixed(2)}s expectedTotal=${expectedTotalSeconds.toFixed(2)}s hold=${outputHold.toFixed(2)}s xfade=${outputXf}s`);
       console.error(`[CREATE_MEMORY] offsets=[${offsets.map(o => o.toFixed(2)).join(',')}] inputCount=${outputN}`);
       return jsonError(res, 500, 'DURATION_TOO_SHORT', `Video duration ${videoDuration.toFixed(2)}s is too short for ${outputN} images (expected >= ${expectedMinDuration.toFixed(2)}s)`, {
         ok: false,
@@ -1242,7 +1236,7 @@ async function createMemoryRenderOnly(req, res) {
         targetDurationSec: parseFloat(outputTargetDuration.toFixed(2)),
         expectedTotalSeconds: parseFloat(expectedTotalSeconds.toFixed(2)),
         holdSec: parseFloat(outputHold.toFixed(2)),
-        xfadeSec: outputXfade,
+        xfadeSec: outputXf,
         offsets: offsets.map(o => parseFloat(o.toFixed(2))),
         ffmpegInputCount: outputN,
       });
@@ -1250,7 +1244,7 @@ async function createMemoryRenderOnly(req, res) {
     
     console.log(`[CREATE_MEMORY] OUTPUT_VALIDATION_PASSED: duration=${videoDuration.toFixed(2)}s >= expectedMin=${expectedMinDuration.toFixed(2)}s`);
     console.log(`[CREATE_MEMORY] RENDER_COMPLETE`);
-    console.log(`[CREATE_MEMORY] plan: imageCountUsed=${outputN} targetDurationSec=${outputTargetDuration.toFixed(2)} holdSec=${outputHold.toFixed(2)} xfadeSec=${outputXfade} expectedTotalSeconds=${expectedTotalSeconds.toFixed(2)}`);
+    console.log(`[CREATE_MEMORY] plan: imageCountUsed=${outputN} targetDurationSec=${outputTargetDuration.toFixed(2)} holdSec=${outputHold.toFixed(2)} xfadeSec=${outputXf} expectedTotalSeconds=${expectedTotalSeconds.toFixed(2)}`);
 
     // Apply video fades to silent video first
     progressStore.set(jobId, { percent: 88, step: 'rendering', detail: 'Applying video effects...' });
