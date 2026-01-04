@@ -1,14 +1,15 @@
 /**
  * Vercel Serverless Function: Sequence Planning
- * Analyzes uploaded images and returns the best ordered sequence
- * Uses OpenAI Responses API (/v1/responses) - server-side only
+ * Returns image ordering (currently returns original order)
+ * OpenAI sequencing can be added later if needed
  * 
  * POST /api/sequence
  * Body: {
+ *   photoKeys?: string[],
+ *   images?: Array<{ id: string, url?: string, base64?: string, mimeType?: string }>,
  *   context?: string,
  *   aspectRatio?: string,
- *   frameRate?: number,
- *   images: Array<{ id: string, url?: string, base64?: string, mimeType?: string }>
+ *   frameRate?: number
  * }
  */
 
@@ -131,120 +132,12 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Too few images (min 6)' });
     }
 
-    // Validate API key
-    const apiKey = process.env.OPENAI_API_KEY;
-    const hasApiKey = !!apiKey;
-    console.log('[SEQUENCE] OPENAI_API_KEY exists:', hasApiKey);
-    
-    if (!apiKey) {
-      console.error('[SEQUENCE] OPENAI_API_KEY is not set');
-      return res.status(500).json({ error: 'OPENAI_API_KEY is not set' });
-    }
-
+    // Extract context (not currently used, but kept for future use)
     const context = typeof body.context === 'string' ? body.context.trim() : '';
     const aspectRatio = body.aspectRatio || '16:9';
     const frameRate = typeof body.frameRate === 'number' ? body.frameRate : 24;
 
-    // Build image content for OpenAI
-    let imageContents: Array<{ type: string; image_url: string }>;
-    
-    if (photoKeys) {
-      // New flow: Generate presigned GET URLs for S3 keys
-      console.log('[SEQUENCE] Using photoKeys mode, generating presigned GET URLs from S3');
-      
-      // Validate AWS credentials
-      const awsRegion = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-2';
-      const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
-      const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-      const s3Bucket = process.env.S3_BUCKET;
-      
-      if (!awsAccessKeyId || !awsSecretAccessKey || !s3Bucket) {
-        console.error('[SEQUENCE] Missing AWS credentials for S3 access');
-        return res.status(500).json({ 
-          error: 'AWS credentials not configured. S3_BUCKET, AWS_ACCESS_KEY_ID, and AWS_SECRET_ACCESS_KEY must be set in Vercel environment variables.' 
-        });
-      }
-
-      // Import AWS SDK (dynamic import to avoid bundling issues)
-      const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
-      const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
-      
-      const s3 = new S3Client({
-        region: awsRegion,
-        credentials: {
-          accessKeyId: awsAccessKeyId,
-          secretAccessKey: awsSecretAccessKey,
-        },
-      });
-
-      // Generate presigned GET URLs for each photo key
-      const imageUrls = await Promise.all(
-        photoKeys.map(async (key: string, idx: number) => {
-          try {
-            const signedUrl = await getSignedUrl(
-              s3,
-              new GetObjectCommand({
-                Bucket: s3Bucket,
-                Key: key,
-              }),
-              { expiresIn: 3600 } // 1 hour
-            );
-            console.log(`[SEQUENCE] Generated presigned URL for key ${idx + 1}/${photoKeys.length}: ${key}`);
-            return signedUrl;
-          } catch (s3Error: any) {
-            console.error(`[SEQUENCE] Failed to generate presigned URL for key ${key}:`, s3Error.message);
-            throw new Error(`Failed to generate presigned URL for photo ${idx + 1}: ${s3Error.message}`);
-          }
-        })
-      );
-
-      imageContents = imageUrls.map((url: string) => ({
-        type: 'input_image',
-        image_url: url
-      }));
-    } else {
-      // Legacy flow: Support base64/url images (for backward compatibility)
-      console.log('[SEQUENCE] Using legacy images mode (base64/url)');
-      imageContents = legacyImages.map((img: any, idx: number) => {
-        let imageUrl: string;
-        if (img.url) {
-          imageUrl = img.url;
-        } else if (img.base64) {
-          const mimeType = img.mimeType || 'image/jpeg';
-          imageUrl = `data:${mimeType};base64,${img.base64}`;
-        } else {
-          throw new Error(`Image ${idx} (id: ${img.id}) must have either url or base64`);
-        }
-        
-        return {
-          type: 'input_image',
-          image_url: imageUrl
-        };
-      });
-    }
-
-    // Build prompt
-    const systemPrompt = `You are a professional photo editor and film story editor. Your job is to analyze a set of images and produce the best cinematic ordering for a memory video.
-
-OUTPUT FORMAT (JSON only, no markdown):
-{
-  "order": [0, 1, 2, ...],  // Array of indices representing the optimal sequence
-  "beats": ["opening", "build", "turn", "climax", "ending"],  // Optional: narrative beats
-  "rationale": "Brief explanation of the ordering choice"
-}
-
-RULES:
-- Return "order" as an array of indices [0, 1, 2, ..., n-1] where n is the number of images
-- Each index must appear exactly once
-- Order should create the best cinematic narrative flow
-- Consider visual composition, mood transitions, and storytelling arc`;
-
-    const userPrompt = `Context: ${context || '(none)'}
-Aspect Ratio: ${aspectRatio}
-Frame Rate: ${frameRate} fps
-
-Analyze these ${imageCount} images and determine the optimal cinematic ordering.
-Return ONLY valid JSON with keys: order (array of indices), beats (optional array), rationale (optional string).`;
+    console.log(`[SEQUENCE] Processing ${imageCount} photos, context: "${context.substring(0, 50)}${context.length > 50 ? '...' : ''}"`);
 
     // Return sequence order (using original order for now - OpenAI sequencing can be added later)
     // Ensure sequence array is always present for backward compatibility
