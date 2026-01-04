@@ -813,44 +813,83 @@ async function muxAudioVideo(videoPath, audioPath, outputPath, videoDuration) {
 }
 
 /**
- * Build FFmpeg zoompan expression for motion
+ * Easing function: easeInOutCubic (smooth, cinematic)
+ */
+function easeInOutCubic(t) {
+  if (t < 0.5) {
+    return 4 * t * t * t;
+  }
+  return 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+/**
+ * Clamp helper
+ */
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
+
+/**
+ * Build FFmpeg zoompan expression using FOCUS_THEN_MOVE camera plan
  * @param {Object} params
- * @param {number} params.startScale - Starting scale
- * @param {number} params.endScale - Ending scale
- * @param {number} params.driftX - Normalized drift X (-1..1)
- * @param {number} params.driftY - Normalized drift Y (-1..1)
+ * @param {number} params.startZoom - Starting zoom (1.0 = no zoom)
+ * @param {number} params.endZoom - Ending zoom
+ * @param {number} params.focalX - Focal point X (normalized 0..1)
+ * @param {number} params.focalY - Focal point Y (normalized 0..1)
+ * @param {number} params.panOffsetX - Pan offset X (normalized -1..1)
+ * @param {number} params.panOffsetY - Pan offset Y (normalized -1..1)
+ * @param {number} params.holdFrac - Hold fraction (0.25 = 25% focus hold)
  * @param {number} params.frames - Number of output frames
  * @param {number} params.W - Output width
  * @param {number} params.H - Output height
  * @returns {string} FFmpeg zoompan filter string
  */
-function buildZoompanExpr({ startScale, endScale, driftX, driftY, frames, W, H }) {
-  // Calculate headroom from zoom (available pan space)
-  // headroom = (scale - 1) * dimension / 2
-  const startHeadroomX = (startScale - 1) * W / 2;
-  const startHeadroomY = (startScale - 1) * H / 2;
-  const endHeadroomX = (endScale - 1) * W / 2;
-  const endHeadroomY = (endScale - 1) * H / 2;
+function buildZoompanExpr({ startZoom, endZoom, focalX, focalY, panOffsetX, panOffsetY, holdFrac, frames, W, H }) {
+  // Phase split: hold frames for focus, then move
+  const holdFrames = Math.max(1, Math.floor(frames * holdFrac));
+  const moveFrames = frames - holdFrames;
 
-  // Use easeInOutSine easing for smooth motion: ease = (1 - cos(PI * t)) / 2
-  // where t = on / (N - 1)
-  const nMinus1 = frames - 1;
-  const easeExpr = `(1 - cos(PI * on / ${nMinus1})) / 2`;
-
-  // Interpolate scale with ease (smooth eased zoom)
-  const scaleExpr = `${startScale} + (${endScale} - ${startScale}) * ${easeExpr}`;
-
-  // Calculate headroom with ease (interpolated headroom)
-  const headroomXExpr = `${startHeadroomX} + (${endHeadroomX} - ${startHeadroomX}) * ${easeExpr}`;
-  const headroomYExpr = `${startHeadroomY} + (${endHeadroomY} - ${startHeadroomY}) * ${easeExpr}`;
+  // Eased progress during move phase only (0..1)
+  // During hold phase: tMove = 0
+  // During move phase: tMove = easeInOutCubic(progress)
+  const nMinus1 = Math.max(1, moveFrames - 1);
+  const frameInMovePhase = `max(0, on - ${holdFrames})`;
+  const tMoveRaw = `${frameInMovePhase} / ${nMinus1}`;
+  const tMoveClamped = `min(1, max(0, ${tMoveRaw}))`;
   
-  // Pan X: center + driftX * headroom * ease (smooth eased pan)
-  const panXExpr = `(iw - ow) / 2 + ${driftX} * ${headroomXExpr} * ${easeExpr}`;
-  const panYExpr = `(ih - oh) / 2 + ${driftY} * ${headroomYExpr} * ${easeExpr}`;
+  // easeInOutCubic: t < 0.5 ? 4*t*t*t : 1 - pow(-2*t + 2, 3) / 2
+  const easeExpr = `if(lt(${tMoveClamped}, 0.5), 4 * ${tMoveClamped} * ${tMoveClamped} * ${tMoveClamped}, 1 - pow(-2 * ${tMoveClamped} + 2, 3) / 2)`;
 
-  // Build zoompan filter
-  // zoompan=z='scale_expr':x='panX_expr':y='panY_expr':d=frames
-  return `zoompan=z='${scaleExpr}':x='${panXExpr}':y='${panYExpr}':d=${frames}`;
+  // Zoom curve: hold at startZoom, then ease to endZoom
+  const zoomExpr = `if(lt(on, ${holdFrames}), ${startZoom}, ${startZoom} + (${endZoom} - ${startZoom}) * ${easeExpr})`;
+
+  // Calculate headroom from zoom (available pan space)
+  // headroom = (zoom - 1) * dimension / 2
+  const headroomXExpr = `(${zoomExpr} - 1) * ${W} / 2`;
+  const headroomYExpr = `(${zoomExpr} - 1) * ${H} / 2`;
+
+  // Focal point in pixels (normalized to image dimensions)
+  // For zoompan, we work in the scaled image space
+  // Focal point: fx * iw, fy * ih
+  const focalPX = `${focalX} * iw`;
+  const focalPY = `${focalY} * ih`;
+
+  // Pan offset (only applied during move phase, clamped to max 4%)
+  const MAX_PAN_NORM = 0.04;
+  const panDX = `${panOffsetX} * ${MAX_PAN_NORM} * iw`;
+  const panDY = `${panOffsetY} * ${MAX_PAN_NORM} * ih * 0.5`;
+
+  // Center position: start at focal point, then apply subtle drift during move phase
+  const centerXExpr = `if(lt(on, ${holdFrames}), ${focalPX}, ${focalPX} + ${panDX} * (${easeExpr} - 0.5))`;
+  const centerYExpr = `if(lt(on, ${holdFrames}), ${focalPY}, ${focalPY} + ${panDY} * (${easeExpr} - 0.5))`;
+
+  // Pan X/Y: center - output/2 (zoompan expects top-left corner)
+  const panXExpr = `${centerXExpr} - ow / 2`;
+  const panYExpr = `${centerYExpr} - oh / 2`;
+
+  // Build zoompan filter (no rotation)
+  // zoompan=z='zoom_expr':x='panX_expr':y='panY_expr':d=frames
+  return `zoompan=z='${zoomExpr}':x='${panXExpr}':y='${panYExpr}':d=${frames}`;
 }
 
 // Generates a cinematic slideshow video with xfade transitions
@@ -947,16 +986,16 @@ async function renderSlideshow({
 
   // Log motion summary
   const motionCounts = {};
-  let maxScaleUsed = 1.0;
+  let maxZoomUsed = 1.0;
   let movedCount = 0;
   motions.forEach((m, idx) => {
     motionCounts[m.type] = (motionCounts[m.type] || 0) + 1;
-    maxScaleUsed = Math.max(maxScaleUsed, m.startScale, m.endScale);
-    if (m.startScale !== 1.0 || m.endScale !== 1.0 || Math.abs(m.driftX) > 0.001 || Math.abs(m.driftY) > 0.001) {
+    maxZoomUsed = Math.max(maxZoomUsed, m.startZoom, m.endZoom);
+    if (m.startZoom !== 1.0 || m.endZoom !== 1.0 || Math.abs(m.panOffsetX) > 0.001 || Math.abs(m.panOffsetY) > 0.001) {
       movedCount++;
     }
   });
-  console.log(`[MOTION-PHASE1] pack=${motionPack} counts=${JSON.stringify(motionCounts)} maxScale=${maxScaleUsed.toFixed(3)} movedFrames=${movedCount}/${N}`);
+  console.log(`[FOCUS_THEN_MOVE] pack=${motionPack} counts=${JSON.stringify(motionCounts)} maxZoom=${maxZoomUsed.toFixed(3)} movedFrames=${movedCount}/${N}`);
 
   // Build filtergraph: process each image with motion, then chain xfade transitions
   const filterParts = [];
