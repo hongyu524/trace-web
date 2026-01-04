@@ -530,11 +530,11 @@ async function appendEndCap(inputMp4Path, outputMp4Path) {
   const videoDuration = await ffprobeDurationSeconds(inputMp4Path);
   const ffprobe = pickFfprobePath();
   
-  // Get video dimensions
+  // Get video dimensions and fps
   const { stdout: probeStdout } = await run(ffprobe, [
     '-v', 'error',
     '-select_streams', 'v:0',
-    '-show_entries', 'stream=width,height',
+    '-show_entries', 'stream=width,height,r_frame_rate',
     '-of', 'json',
     inputMp4Path,
   ], {
@@ -544,6 +544,10 @@ async function appendEndCap(inputMp4Path, outputMp4Path) {
   const probeData = JSON.parse(probeStdout);
   const width = probeData.streams?.[0]?.width || 1920;
   const height = probeData.streams?.[0]?.height || 1080;
+  // Parse fps from r_frame_rate (e.g., "30/1" or "30000/1001")
+  const rFrameRate = probeData.streams?.[0]?.r_frame_rate || '30/1';
+  const [num, den] = rFrameRate.split('/').map(Number);
+  const fps = den ? num / den : 30;
   
   // End cap timings:
   // - Freeze last frame: 0.75s
@@ -570,9 +574,15 @@ async function appendEndCap(inputMp4Path, outputMp4Path) {
   const logoX = `(W-w)/2`; // Center X
   const logoY = `(H-h)/2`; // Center Y
   
+  // Calculate frame counts for efficient looping (avoid infinite loop)
+  const freezeFadeFrames = Math.ceil((freezeDuration + fadeDuration) * fps);
+  const freezeFrames = Math.ceil(freezeDuration * fps);
+  
+  // More efficient approach: extract last frame, loop with specific frame count, then fade
+  // This avoids the infinite loop that causes massive frame duplication
   const filterComplex = [
-    // Extract last frame, freeze for 0.75s, then fade to black over 1.0s (total 1.75s)
-    `[0:v]trim=start=${Math.max(0, videoDuration - 0.01)}:end=${videoDuration},setpts=PTS-STARTPTS,loop=loop=-1:size=1:start=0,trim=duration=${freezeDuration + fadeDuration},setpts=PTS-STARTPTS,fade=t=out:st=${freezeDuration}:d=${fadeDuration}[freeze_fade]`,
+    // Extract last frame, loop it for the freeze+fade duration (with exact frame count)
+    `[0:v]trim=start=${Math.max(0, videoDuration - 0.01)}:end=${videoDuration},setpts=PTS-STARTPTS,loop=loop=${freezeFadeFrames}:size=1:start=0,setpts=PTS-STARTPTS,fade=t=out:st=${freezeDuration}:d=${fadeDuration}[freeze_fade]`,
     // Create black background with logo for black hold duration (1.25s)
     `color=c=black:s=${width}x${height}:d=${blackHoldDuration}[blackbg]`,
     `[1:v]scale=${logoScale}:-1:flags=lanczos[logo_scaled]`,
