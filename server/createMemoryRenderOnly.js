@@ -596,7 +596,19 @@ async function muxAudioVideo(videoPath, audioPath, outputPath, videoDuration) {
   
   console.log('[FADE] audioFadeIn=' + audioFadeIn + ' audioFadeOut=' + audioFadeOut + ' duration=' + videoDuration);
   console.log('[MUSIC] ffmpegCmd=' + ffmpeg + ' ' + args.join(' '));
-  const result = await run(ffmpeg, args, { env: process.env });
+  console.log('[MUSIC] Starting mux with timeout protection (max 120s)...');
+  
+  // Add timeout wrapper for music muxing (max 2 minutes)
+  const timeoutMs = 120000; // 2 minutes
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => {
+      reject(new Error(`Music muxing timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+  
+  const muxPromise = run(ffmpeg, args, { env: process.env });
+  const result = await Promise.race([muxPromise, timeoutPromise]);
+  console.log('[MUSIC] Mux completed successfully');
   return result;
 }
 
