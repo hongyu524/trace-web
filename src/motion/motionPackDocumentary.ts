@@ -189,6 +189,18 @@ function cutInProgress(u: number, pStart: number = 0.14, pEnd: number = 0.96): n
 }
 
 /**
+ * Calculate starting progress from previous progress end for continuity
+ * Maintains motion continuity across clips by starting from where previous clip ended
+ * @param prevProgressEnd - Previous clip's ending progress (0..1)
+ * @returns Starting progress for current clip, clamped to reasonable range
+ */
+function calculateContinuityStart(prevProgressEnd: number): number {
+  // Start slightly behind previous end (0.08 offset) to maintain forward motion
+  // Clamp to [0.08, 0.22] to ensure we're always mid-motion
+  return clamp(prevProgressEnd - 0.08, 0.08, 0.22);
+}
+
+/**
  * Clamp helper
  */
 function clamp(v: number, min: number, max: number): number {
@@ -359,6 +371,7 @@ export function getDocumentaryTransformAt(
     anchorY?: number;  // Focal point Y (0-1 normalized)
     frame?: number;    // Current frame index (0-based)
     frames?: number;   // Total frame count
+    prevProgressEnd?: number;  // Previous clip's ending progress for continuity (0..1)
   }
 ): DocumentaryTransformAt {
   const cfg = params.config ?? getDocumentaryDefaults();
@@ -369,8 +382,13 @@ export function getDocumentaryTransformAt(
     ? params.frame / Math.max(1, params.frames - 1)
     : clamp01(t);
   
-  // Cut-in progress: starts at 0.14, ends at 0.96 (never starts at 0)
-  const p = cutInProgress(u, 0.14, 0.96);
+  // Calculate starting progress: use continuity from previous clip if available, otherwise default
+  const pStart = params.prevProgressEnd !== undefined
+    ? calculateContinuityStart(params.prevProgressEnd)
+    : 0.14; // Default start
+  
+  // Cut-in progress: starts at pStart (continuity-aware), ends at 0.96 (never starts at 0)
+  const p = cutInProgress(u, pStart, 0.96);
 
   // All presets have rotateDeg = 0
   const rotateDeg = 0;
