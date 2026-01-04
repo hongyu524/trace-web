@@ -111,23 +111,24 @@ class SeededRNG {
 
 /**
  * Get default documentary motion configuration
+ * "Gallery Documentary" preset: premium, consistent, directed motion
  */
 export function getDocumentaryDefaults(): DocumentaryMotionConfig {
   return {
-    staticWeight: 0.45,        // 45% static
-    pushInWeight: 0.35,        // 35% push-in
-    driftWeight: 0.15,         // 15% drift (7.5% L, 7.5% R)
-    pullBackWeight: 0.05,      // 5% pull-back
-    parallaxWeight: 0.0,       // 0% parallax (not supported by default)
-    transitionDuration: 0.4,   // 400ms
-    minScale: 1.01,            // Push-in/pull-back scale range
-    maxScale: 1.035,           // Push-in/pull-back max scale (subtle)
-    driftMinScale: 1.03,       // Drift start scale (coupled zoom-pan)
-    driftMaxScale: 1.06,       // Drift end scale (coupled zoom-pan)
-    minDriftPercent: 1.0,      // 1% of frame width (will be constrained by overscan)
-    maxDriftPercent: 3.0,      // 3% of frame width (will be constrained by overscan)
-    holdFraction: 0.25,        // 25% hold phase (premium doc feel)
-    driftSafetyPx: 4,          // 4px safety margin (or 0.1% frame width, whichever is larger)
+    staticWeight: 0.0,         // 0% static (gallery mode: all shots have motion)
+    pushInWeight: 0.70,        // 70% push-in (default motion type)
+    driftWeight: 0.30,         // 30% drift (25% driftX, 5% driftY - handled in preset selection)
+    pullBackWeight: 0.0,       // 0% pull-back (gallery mode: no pull-back)
+    parallaxWeight: 0.0,       // 0% parallax (not supported)
+    transitionDuration: 0.4,   // 400ms cross-dissolve
+    minScale: 1.01,            // Push-in start scale (neutral start)
+    maxScale: 1.035,           // Push-in max scale (subtle, premium)
+    driftMinScale: 1.03,       // Drift start scale (coupled zoom-pan, auto-calculated)
+    driftMaxScale: 1.06,       // Drift max scale (coupled zoom-pan hard cap)
+    minDriftPercent: 0.4,      // 0.4% of frame width (premium range)
+    maxDriftPercent: 1.2,      // 1.2% of frame width (premium range, hard cap)
+    holdFraction: 0.25,        // 25% hold phase (then move)
+    driftSafetyPx: 4,          // 4px safety margin (or 0.15% frame width, whichever is larger)
   };
 }
 
@@ -268,8 +269,8 @@ export function getDocumentaryTransformAt(
   let translateX = 0;
   let translateY = 0;
 
-  // Calculate safety margin (use larger of absolute px or 0.1% frame width)
-  const safetyMarginPx = Math.max(cfg.driftSafetyPx, params.frameWidth * 0.001);
+  // Calculate safety margin (use larger of absolute px or 0.15% frame width)
+  const safetyMarginPx = Math.max(cfg.driftSafetyPx, params.frameWidth * 0.0015);
 
   switch (preset) {
     case 'STATIC':
@@ -317,70 +318,118 @@ export function getDocumentaryTransformAt(
     }
 
     case 'LATERAL_DRIFT_L': {
-      // Coupled zoom-pan: start at driftMinScale, ramp to driftMaxScale
-      // Pan distance is constrained by overscan rule
+      // Coupled zoom-pan: calculate required scale from drift distance
       const startScale = cfg.driftMinScale;
-      const endScale = rng.nextFloat(cfg.driftMinScale, cfg.driftMaxScale);
       
-      // Apply hold phase + easeInOutSine
-      const holdFrac = cfg.holdFraction;
-      let tMove = 0;
-      if (t >= holdFrac) {
-        const moveProgress = (t - holdFrac) / (1 - holdFrac);
-        tMove = clamp(moveProgress, 0, 1);
-      }
-      const eased = easeInOutSine(tMove);
-      
-      // Interpolate scale
-      scale = startScale + (endScale - startScale) * eased;
-      
-      // Calculate desired drift percentage (before coupling constraint)
+      // Select drift percentage (premium range: 0.4%-1.2%)
       const desiredDriftPercent = rng.nextFloat(cfg.minDriftPercent, cfg.maxDriftPercent);
       const desiredDriftPx = (params.frameWidth * desiredDriftPercent) / 100;
       
-      // Calculate maximum pan at current scale (overscan rule)
-      const maxPanAtCurrentScale = calculateMaxPanAtScale(scale, params.frameWidth, safetyMarginPx);
+      // Calculate required end scale from pan distance (overscan rule):
+      // requiredEndScale = 1 + 2*(absPanPx + safetyPx)/frameWidth
+      const requiredEndScale = 1 + (2 * (desiredDriftPx + safetyMarginPx)) / params.frameWidth;
       
-      // Constrain pan to overscan limit
-      const actualDriftPx = Math.min(desiredDriftPx, maxPanAtCurrentScale);
+      // Clamp requiredEndScale to [1.03, 1.06] (premium safe range)
+      let endScale = clamp(requiredEndScale, cfg.driftMinScale, cfg.driftMaxScale);
       
-      // Apply eased pan (negative for left drift)
-      translateX = -actualDriftPx * eased;
-      translateY = 0;
+      // If requiredEndScale exceeds 1.06, reduce driftPercent to fit
+      if (requiredEndScale > cfg.driftMaxScale) {
+        // Back-calculate maximum drift from max scale
+        const maxDriftPx = ((cfg.driftMaxScale - 1) * params.frameWidth) / 2 - safetyMarginPx;
+        const maxDriftPercent = (maxDriftPx / params.frameWidth) * 100;
+        const adjustedDriftPercent = Math.min(desiredDriftPercent, maxDriftPercent);
+        const adjustedDriftPx = (params.frameWidth * adjustedDriftPercent) / 100;
+        
+        // Recalculate end scale with adjusted drift
+        endScale = cfg.driftMaxScale;
+        const actualDriftPx = adjustedDriftPx;
+        
+        // Apply hold phase + easeInOutSine (same eased progress for scale and translate)
+        const holdFrac = cfg.holdFraction;
+        let tMove = 0;
+        if (t >= holdFrac) {
+          const moveProgress = (t - holdFrac) / (1 - holdFrac);
+          tMove = clamp(moveProgress, 0, 1);
+        }
+        const eased = easeInOutSine(tMove);
+        
+        // Interpolate scale and pan with same eased progress
+        scale = startScale + (endScale - startScale) * eased;
+        translateX = -actualDriftPx * eased;
+        translateY = 0;
+      } else {
+        // Apply hold phase + easeInOutSine (same eased progress for scale and translate)
+        const holdFrac = cfg.holdFraction;
+        let tMove = 0;
+        if (t >= holdFrac) {
+          const moveProgress = (t - holdFrac) / (1 - holdFrac);
+          tMove = clamp(moveProgress, 0, 1);
+        }
+        const eased = easeInOutSine(tMove);
+        
+        // Interpolate scale and pan with same eased progress
+        scale = startScale + (endScale - startScale) * eased;
+        translateX = -desiredDriftPx * eased;
+        translateY = 0;
+      }
       break;
     }
 
     case 'LATERAL_DRIFT_R': {
-      // Coupled zoom-pan: start at driftMinScale, ramp to driftMaxScale
-      // Pan distance is constrained by overscan rule
+      // Coupled zoom-pan: calculate required scale from drift distance
       const startScale = cfg.driftMinScale;
-      const endScale = rng.nextFloat(cfg.driftMinScale, cfg.driftMaxScale);
       
-      // Apply hold phase + easeInOutSine
-      const holdFrac = cfg.holdFraction;
-      let tMove = 0;
-      if (t >= holdFrac) {
-        const moveProgress = (t - holdFrac) / (1 - holdFrac);
-        tMove = clamp(moveProgress, 0, 1);
-      }
-      const eased = easeInOutSine(tMove);
-      
-      // Interpolate scale
-      scale = startScale + (endScale - startScale) * eased;
-      
-      // Calculate desired drift percentage (before coupling constraint)
+      // Select drift percentage (premium range: 0.4%-1.2%)
       const desiredDriftPercent = rng.nextFloat(cfg.minDriftPercent, cfg.maxDriftPercent);
       const desiredDriftPx = (params.frameWidth * desiredDriftPercent) / 100;
       
-      // Calculate maximum pan at current scale (overscan rule)
-      const maxPanAtCurrentScale = calculateMaxPanAtScale(scale, params.frameWidth, safetyMarginPx);
+      // Calculate required end scale from pan distance (overscan rule):
+      // requiredEndScale = 1 + 2*(absPanPx + safetyPx)/frameWidth
+      const requiredEndScale = 1 + (2 * (desiredDriftPx + safetyMarginPx)) / params.frameWidth;
       
-      // Constrain pan to overscan limit
-      const actualDriftPx = Math.min(desiredDriftPx, maxPanAtCurrentScale);
+      // Clamp requiredEndScale to [1.03, 1.06] (premium safe range)
+      let endScale = clamp(requiredEndScale, cfg.driftMinScale, cfg.driftMaxScale);
       
-      // Apply eased pan (positive for right drift)
-      translateX = actualDriftPx * eased;
-      translateY = 0;
+      // If requiredEndScale exceeds 1.06, reduce driftPercent to fit
+      if (requiredEndScale > cfg.driftMaxScale) {
+        // Back-calculate maximum drift from max scale
+        const maxDriftPx = ((cfg.driftMaxScale - 1) * params.frameWidth) / 2 - safetyMarginPx;
+        const maxDriftPercent = (maxDriftPx / params.frameWidth) * 100;
+        const adjustedDriftPercent = Math.min(desiredDriftPercent, maxDriftPercent);
+        const adjustedDriftPx = (params.frameWidth * adjustedDriftPercent) / 100;
+        
+        // Recalculate end scale with adjusted drift
+        endScale = cfg.driftMaxScale;
+        const actualDriftPx = adjustedDriftPx;
+        
+        // Apply hold phase + easeInOutSine (same eased progress for scale and translate)
+        const holdFrac = cfg.holdFraction;
+        let tMove = 0;
+        if (t >= holdFrac) {
+          const moveProgress = (t - holdFrac) / (1 - holdFrac);
+          tMove = clamp(moveProgress, 0, 1);
+        }
+        const eased = easeInOutSine(tMove);
+        
+        // Interpolate scale and pan with same eased progress
+        scale = startScale + (endScale - startScale) * eased;
+        translateX = actualDriftPx * eased;
+        translateY = 0;
+      } else {
+        // Apply hold phase + easeInOutSine (same eased progress for scale and translate)
+        const holdFrac = cfg.holdFraction;
+        let tMove = 0;
+        if (t >= holdFrac) {
+          const moveProgress = (t - holdFrac) / (1 - holdFrac);
+          tMove = clamp(moveProgress, 0, 1);
+        }
+        const eased = easeInOutSine(tMove);
+        
+        // Interpolate scale and pan with same eased progress
+        scale = startScale + (endScale - startScale) * eased;
+        translateX = desiredDriftPx * eased;
+        translateY = 0;
+      }
       break;
     }
 
