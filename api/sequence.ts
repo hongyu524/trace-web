@@ -115,6 +115,10 @@ export default async function handler(req: any, res: any) {
       let imageUrl: string;
       if (img.url) {
         imageUrl = img.url;
+        // Validate URL format
+        if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://') && !imageUrl.startsWith('data:')) {
+          console.warn(`[SEQUENCE] Image ${idx} URL may be invalid (not http/https/data): ${imageUrl.substring(0, 50)}`);
+        }
       } else if (img.base64) {
         const mimeType = img.mimeType || 'image/jpeg';
         imageUrl = `data:${mimeType};base64,${img.base64}`;
@@ -127,6 +131,8 @@ export default async function handler(req: any, res: any) {
         image_url: { url: imageUrl }
       };
     });
+    
+    console.log(`[SEQUENCE] Processing ${imageContents.length} images for sequence analysis`);
 
     // Build prompt
     const systemPrompt = `You are a professional photo editor and film story editor. Your job is to analyze a set of images and produce the best cinematic ordering for a memory video.
