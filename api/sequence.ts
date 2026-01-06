@@ -12,6 +12,8 @@
  * }
  */
 
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+
 export const runtime = "nodejs";
 
 // Rate limiting: Simple in-memory store (for production, use Redis/Upstash)
@@ -41,73 +43,51 @@ function checkRateLimit(ip: string | null): { allowed: boolean; remaining: numbe
   return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - record.count };
 }
 
-export default async function handler(req: any): Promise<Response> {
+// Helper to read headers in Node.js runtime
+function getHeader(req: VercelRequest, name: string): string | undefined {
+  const key = name.toLowerCase();
+  const val = req?.headers?.[key];
+  return Array.isArray(val) ? val[0] : val;
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Only allow POST
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Helper to read headers in Node.js runtime (IncomingMessage style)
-  const getHeader = (name: string): string | undefined => {
-    const value = req?.headers?.[name.toLowerCase()];
-    if (Array.isArray(value)) return value[0];
-    return value;
-  };
-
   // Rate limiting
-  const clientIp = getHeader('x-forwarded-for')?.split(',')[0]?.trim() || 
-                   getHeader('x-real-ip') || 
+  const clientIp = getHeader(req, 'x-forwarded-for')?.split(',')[0]?.trim() || 
+                   getHeader(req, 'x-real-ip') ||
                    null;
   const rateLimit = checkRateLimit(clientIp);
   
   if (!rateLimit.allowed) {
-    return new Response(JSON.stringify({ 
+    return res.status(429).json({ 
       error: 'Rate limit exceeded', 
       message: 'Too many requests. Please try again later.' 
-    }), {
-      status: 429,
-      headers: { 
-        'Content-Type': 'application/json',
-        'X-RateLimit-Remaining': '0',
-        'Retry-After': '600'
-      }
     });
   }
 
   try {
     // Input validation
-    const body = await req.json();
+    const body = req.body;
     
-    if (!body.images || !Array.isArray(body.images)) {
-      return new Response(JSON.stringify({ error: 'images array required' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+    if (!body || !body.images || !Array.isArray(body.images)) {
+      return res.status(400).json({ error: 'images array required' });
     }
 
     if (body.images.length === 0) {
-      return new Response(JSON.stringify({ error: 'images array cannot be empty' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return res.status(400).json({ error: 'images array cannot be empty' });
     }
 
     // Limit number of images
     if (body.images.length > 36) {
-      return new Response(JSON.stringify({ error: 'Too many images (max 36)' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return res.status(400).json({ error: 'Too many images (max 36)' });
     }
 
     if (body.images.length < 6) {
-      return new Response(JSON.stringify({ error: 'Too few images (min 6)' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return res.status(400).json({ error: 'Too few images (min 6)' });
     }
 
     // Validate API key
@@ -117,10 +97,7 @@ export default async function handler(req: any): Promise<Response> {
     
     if (!apiKey) {
       console.error('[SEQUENCE] OPENAI_API_KEY is not set');
-      return new Response(JSON.stringify({ error: 'OPENAI_API_KEY is not set' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return res.status(500).json({ error: 'OPENAI_API_KEY is not set' });
     }
 
     const context = typeof body.context === 'string' ? body.context.trim() : '';
@@ -207,13 +184,10 @@ Return ONLY valid JSON with keys: order (array of indices), beats (optional arra
       
       if (!r.ok) {
         console.error('[SEQUENCE] OpenAI API error:', r.status, JSON.stringify(json).substring(0, 200));
-        return new Response(JSON.stringify({ 
+        return res.status(502).json({ 
           error: "OpenAI auth failed", 
           openaiStatus: r.status, 
           openaiBody: json 
-        }), {
-          status: 502,
-          headers: { 'Content-Type': 'application/json' }
         });
       }
 
@@ -229,21 +203,15 @@ Return ONLY valid JSON with keys: order (array of indices), beats (optional arra
       } catch (parseError) {
         console.error('[SEQUENCE] JSON parse error:', parseError);
         console.error('[SEQUENCE] Response text snippet:', text.substring(0, 500));
-        return new Response(JSON.stringify({ 
+        return res.status(500).json({ 
           error: 'Failed to parse OpenAI response as JSON',
           responseSnippet: text.substring(0, 500)
-        }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' }
         });
       }
 
       // Validate order array
       if (!Array.isArray(parsed.order)) {
-        return new Response(JSON.stringify({ error: 'Response missing valid "order" array' }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' }
-        });
+        return res.status(500).json({ error: 'Response missing valid "order" array' });
       }
 
       // Ensure order contains all indices exactly once
@@ -257,16 +225,10 @@ Return ONLY valid JSON with keys: order (array of indices), beats (optional arra
       }
 
       // Return response
-      return new Response(JSON.stringify({
+      return res.status(200).json({
         order: parsed.order,
         beats: Array.isArray(parsed.beats) ? parsed.beats : undefined,
         rationale: typeof parsed.rationale === 'string' ? parsed.rationale : undefined
-      }), {
-        status: 200,
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-RateLimit-Remaining': rateLimit.remaining.toString()
-        }
       });
 
     } catch (error: any) {
@@ -274,10 +236,7 @@ Return ONLY valid JSON with keys: order (array of indices), beats (optional arra
       
       if (error.name === 'AbortError') {
         console.error('[SEQUENCE] Request timed out');
-        return new Response(JSON.stringify({ error: 'Request timed out' }), {
-          status: 504,
-          headers: { 'Content-Type': 'application/json' }
-        });
+        return res.status(504).json({ error: 'Request timed out' });
       }
       
       console.error('[SEQUENCE] Error calling OpenAI:', error);
@@ -286,12 +245,9 @@ Return ONLY valid JSON with keys: order (array of indices), beats (optional arra
 
   } catch (error: any) {
     console.error('[SEQUENCE] Error:', error);
-    return new Response(JSON.stringify({ 
+    return res.status(500).json({ 
       ok: false, 
       error: error.message || 'Unknown error' 
-    }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
     });
   }
 }
