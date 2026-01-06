@@ -225,7 +225,7 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
         if (result.jobId) {
           setMemoryId(result.jobId);
         }
-        console.log('[UploadFlow] Memory created successfully:', result.videoKey);
+        console.log('[UploadFlow] Memory created successfully:', result.videoKey || result.playbackUrl);
         
       } catch (renderError: any) {
         if (progressInterval) {

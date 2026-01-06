@@ -159,7 +159,7 @@ export async function createMemoryRender(params: {
   outputRatio: string;
   fps: number;
   promptText?: string;
-}): Promise<{ path: string; memoryId: string }> {
+}): Promise<{ ok: boolean; playbackUrl: string; jobId: string; videoKey?: string }> {
   const resp = await fetch(`${API_BASE}/api/create-memory`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -175,6 +175,12 @@ export async function createMemoryRender(params: {
     throw new Error(`Failed to create memory (${resp.status}): ${text}`);
   }
   const data = await resp.json();
-  return { path: data.path || data.videoPath, memoryId: data.memoryId || data.id };
+  // Backend returns: { ok: true, jobId, videoKey, playbackUrl, ... }
+  return {
+    ok: data.ok || true,
+    playbackUrl: data.playbackUrl || data.path || data.videoPath || '',
+    jobId: data.jobId || data.memoryId || data.id || '',
+    videoKey: data.videoKey,
+  };
 }
 
