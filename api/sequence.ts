@@ -1,7 +1,7 @@
 /**
  * Vercel Serverless Function: Sequence Planning
  * Analyzes uploaded images and returns the best ordered sequence
- * Uses OpenAI Responses API (/v1/responses) - server-side only
+ * Uses OpenAI Chat Completions API (/v1/chat/completions) with vision model - server-side only
  * 
  * POST /api/sequence
  * Body: {
@@ -110,7 +110,7 @@ export default async function handler(req: any, res: any) {
     const aspectRatio = body.aspectRatio || '16:9';
     const frameRate = typeof body.frameRate === 'number' ? body.frameRate : 24;
 
-    // Build image content for OpenAI
+    // Build image content for OpenAI (using standard chat completions format)
     const imageContents = body.images.map((img: any, idx: number) => {
       let imageUrl: string;
       if (img.url) {
@@ -123,8 +123,8 @@ export default async function handler(req: any, res: any) {
       }
       
       return {
-        type: 'input_image',
-        image_url: imageUrl
+        type: 'image_url',
+        image_url: { url: imageUrl }
       };
     });
 
@@ -151,33 +151,34 @@ Frame Rate: ${frameRate} fps
 Analyze these ${body.images.length} images and determine the optimal cinematic ordering.
 Return ONLY valid JSON with keys: order (array of indices), beats (optional array), rationale (optional string).`;
 
-    // Call OpenAI Responses API
+    // Call OpenAI Chat Completions API (standard endpoint)
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout
+    const timeout = setTimeout(() => controller.abort(), 60000); // 60s timeout for vision models
     
     try {
-      const r = await fetch("https://api.openai.com/v1/responses", {
+      const r = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gpt-4.1-mini",
-          input: [
+          model: "gpt-4o-mini", // Use gpt-4o-mini for vision (cost-effective) or gpt-4o for better quality
+          messages: [
             {
               role: "system",
-              content: [{ type: "input_text", text: systemPrompt }]
+              content: systemPrompt
             },
             {
               role: "user",
               content: [
-                { type: "input_text", text: userPrompt },
+                { type: "text", text: userPrompt },
                 ...imageContents
               ]
             }
           ],
-          max_output_tokens: 800,
+          max_tokens: 800,
+          response_format: { type: "json_object" } // Request JSON response
         }),
         signal: controller.signal
       });
@@ -211,7 +212,8 @@ Return ONLY valid JSON with keys: order (array of indices), beats (optional arra
         });
       }
 
-      const text = json.output_text || json.output || '';
+      // Extract response from standard chat completions format
+      const text = json.choices?.[0]?.message?.content || '';
       console.log('[SEQUENCE] OpenAI response text length:', text.length);
 
       // Parse JSON response
