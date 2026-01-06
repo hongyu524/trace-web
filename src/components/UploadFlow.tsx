@@ -289,7 +289,7 @@ export default function UploadFlow({ onBack }: UploadFlowProps) {
       <div className="max-w-4xl w-full space-y-8">
         <div className="text-center space-y-4">
           <h1 className="text-3xl font-light text-white">Create Your Memory</h1>
-          <p className="text-gray-400 text-sm">Upload 6-36 photos to create your cinematic memory film</p>
+          <p className="text-gray-400 text-sm">Upload 6-24 photos to create your cinematic memory film</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
