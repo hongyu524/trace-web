@@ -21,6 +21,7 @@ export type SequenceResponse = {
 export type SequenceImage = {
   id: string;
   url?: string;
+  s3Key?: string; // S3 key (e.g., "videos/drafts/123-uuid.jpg")
   base64?: string;
   mimeType?: string;
 };
@@ -136,26 +137,12 @@ export async function getSequenceOrder(params: {
   outputRatio?: string;
   fps?: number;
 }): Promise<{ order: number[] }> {
-  // Convert S3 keys to signed URLs for OpenAI vision API
-  const images: SequenceImage[] = await Promise.all(
-    params.photoKeys.map(async (key, idx) => {
-      // Get signed URL for the S3 key
-      let imageUrl: string;
-      try {
-        const signedUrlData = await fetchSignedVideoPayload(key);
-        imageUrl = signedUrlData.signedUrl || signedUrlData.cdnUrl || signedUrlData.s3SignedUrl || key;
-      } catch (err) {
-        console.warn(`[getSequenceOrder] Failed to get signed URL for ${key}, using key as-is:`, err);
-        // Fallback: try to construct a URL from the key (may not work if bucket is private)
-        imageUrl = key;
-      }
-      
-      return {
-        id: String(idx),
-        url: imageUrl,
-      };
-    })
-  );
+  // Pass S3 keys directly - the sequence API will generate signed URLs server-side
+  // This avoids the signed-url endpoint which only works for videos
+  const images: SequenceImage[] = params.photoKeys.map((key, idx) => ({
+    id: String(idx),
+    s3Key: key, // Pass S3 key instead of URL - API will handle URL generation
+  }));
   
   const response = await getImageSequence(
     images,

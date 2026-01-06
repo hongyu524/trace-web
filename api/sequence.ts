@@ -8,11 +8,33 @@
  *   context?: string,
  *   aspectRatio?: string,
  *   frameRate?: number,
- *   images: Array<{ id: string, url?: string, base64?: string, mimeType?: string }>
+ *   images: Array<{ id: string, url?: string, s3Key?: string, base64?: string, mimeType?: string }>
  * }
  */
 
 export const runtime = "nodejs";
+
+// AWS S3 setup for generating presigned URLs
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+
+let s3Client: S3Client | null = null;
+let s3Bucket: string | null = null;
+
+function getS3Config() {
+  if (!s3Client) {
+    s3Client = new S3Client({
+      region: process.env.AWS_REGION || 'us-east-1',
+      credentials: process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY ? {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      } : undefined,
+    });
+    
+    s3Bucket = process.env.S3_BUCKET || process.env.AWS_S3_BUCKET || null;
+  }
+  return { s3Client, s3Bucket };
+}
 
 // Rate limiting: Simple in-memory store (for production, use Redis/Upstash)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -111,26 +133,56 @@ export default async function handler(req: any, res: any) {
     const frameRate = typeof body.frameRate === 'number' ? body.frameRate : 24;
 
     // Build image content for OpenAI (using standard chat completions format)
-    const imageContents = body.images.map((img: any, idx: number) => {
-      let imageUrl: string;
-      if (img.url) {
-        imageUrl = img.url;
-        // Validate URL format
-        if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://') && !imageUrl.startsWith('data:')) {
-          console.warn(`[SEQUENCE] Image ${idx} URL may be invalid (not http/https/data): ${imageUrl.substring(0, 50)}`);
+    // Support both direct URLs and S3 keys (which we'll convert to presigned URLs)
+    const imageContents = await Promise.all(
+      body.images.map(async (img: any, idx: number) => {
+        let imageUrl: string;
+        
+        if (img.url) {
+          // Direct URL provided
+          imageUrl = img.url;
+          // Validate URL format
+          if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://') && !imageUrl.startsWith('data:')) {
+            console.warn(`[SEQUENCE] Image ${idx} URL may be invalid (not http/https/data): ${imageUrl.substring(0, 50)}`);
+          }
+        } else if (img.s3Key) {
+          // S3 key provided - generate presigned GET URL directly
+          try {
+            const { s3Client: client, s3Bucket: bucket } = getS3Config();
+            
+            if (!bucket) {
+              throw new Error('S3_BUCKET environment variable not set in Vercel');
+            }
+            
+            if (!client) {
+              throw new Error('S3 client not initialized - check AWS credentials');
+            }
+            
+            const command = new GetObjectCommand({
+              Bucket: bucket,
+              Key: img.s3Key,
+            });
+            
+            imageUrl = await getSignedUrl(client, command, { expiresIn: 3600 }); // 1 hour expiry
+            console.log(`[SEQUENCE] Generated presigned URL for ${img.s3Key.substring(0, 50)}...`);
+          } catch (err: any) {
+            console.error(`[SEQUENCE] Failed to get presigned URL for S3 key ${img.s3Key}:`, err);
+            throw new Error(`Failed to generate signed URL for image ${idx}: ${err.message}`);
+          }
+        } else if (img.base64) {
+          // Base64 data provided
+          const mimeType = img.mimeType || 'image/jpeg';
+          imageUrl = `data:${mimeType};base64,${img.base64}`;
+        } else {
+          throw new Error(`Image ${idx} (id: ${img.id}) must have either url, s3Key, or base64`);
         }
-      } else if (img.base64) {
-        const mimeType = img.mimeType || 'image/jpeg';
-        imageUrl = `data:${mimeType};base64,${img.base64}`;
-      } else {
-        throw new Error(`Image ${idx} (id: ${img.id}) must have either url or base64`);
-      }
-      
-      return {
-        type: 'image_url',
-        image_url: { url: imageUrl }
-      };
-    });
+        
+        return {
+          type: 'image_url',
+          image_url: { url: imageUrl }
+        };
+      })
+    );
     
     console.log(`[SEQUENCE] Processing ${imageContents.length} images for sequence analysis`);
 
