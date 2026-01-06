@@ -12,8 +12,6 @@
  * }
  */
 
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-
 export const runtime = "nodejs";
 
 // Rate limiting: Simple in-memory store (for production, use Redis/Upstash)
@@ -44,13 +42,13 @@ function checkRateLimit(ip: string | null): { allowed: boolean; remaining: numbe
 }
 
 // Helper to read headers in Node.js runtime
-function getHeader(req: VercelRequest, name: string): string | undefined {
+function getHeader(req: any, name: string): string | undefined {
   const key = name.toLowerCase();
   const val = req?.headers?.[key];
   return Array.isArray(val) ? val[0] : val;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   // Only allow POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
