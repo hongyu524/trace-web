@@ -164,7 +164,7 @@ export async function createMemoryRender(params: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      photos: params.photoKeys.map(key => ({ key })),
+      photoKeys: params.photoKeys, // Backend expects photoKeys as array of strings
       outputRatio: params.outputRatio,
       fps: params.fps,
       promptText: params.promptText || '',
