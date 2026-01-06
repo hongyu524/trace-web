@@ -41,7 +41,7 @@ function checkRateLimit(ip: string | null): { allowed: boolean; remaining: numbe
   return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - record.count };
 }
 
-export default async function handler(req: Request): Promise<Response> {
+export default async function handler(req: any): Promise<Response> {
   // Only allow POST
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
@@ -50,9 +50,16 @@ export default async function handler(req: Request): Promise<Response> {
     });
   }
 
+  // Helper to read headers in Node.js runtime (IncomingMessage style)
+  const getHeader = (name: string): string | undefined => {
+    const value = req?.headers?.[name.toLowerCase()];
+    if (Array.isArray(value)) return value[0];
+    return value;
+  };
+
   // Rate limiting
-  const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 
-                   req.headers.get('x-real-ip') || 
+  const clientIp = getHeader('x-forwarded-for')?.split(',')[0]?.trim() || 
+                   getHeader('x-real-ip') || 
                    null;
   const rateLimit = checkRateLimit(clientIp);
   
