@@ -93,3 +93,86 @@ export async function fetchPlaybackUrl(key: string): Promise<string> {
   return data.playbackUrl as string;
 }
 
+export function resolvePlaybackUrl(input: any): string | null {
+  if (!input) return null;
+  if (typeof input === 'string') return input;
+  return (
+    input.playbackUrl ||
+    input.cdnUrl ||
+    input.videoUrl ||
+    null
+  );
+}
+
+export async function getPresignedUploadUrl(filename: string, mimeType: string): Promise<{ url: string; key: string }> {
+  const resp = await fetch(`${API_BASE}/api/media/presign-upload`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, mimeType }),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Failed to get presigned URL (${resp.status}): ${text}`);
+  }
+  const data = await resp.json();
+  return { url: data.url, key: data.key };
+}
+
+export async function uploadFileToS3(file: File, presignedUrl: string): Promise<void> {
+  const resp = await fetch(presignedUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': file.type },
+    body: file,
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Failed to upload file (${resp.status}): ${text}`);
+  }
+}
+
+export async function getSequenceOrder(params: {
+  photoKeys: string[];
+  promptText?: string;
+  outputRatio?: string;
+  fps?: number;
+}): Promise<{ order: number[] }> {
+  // Use the Vercel API for sequence ordering
+  const images: SequenceImage[] = params.photoKeys.map((key, idx) => ({
+    id: String(idx),
+    url: key, // Assuming key is a URL or will be resolved
+  }));
+  
+  const response = await getImageSequence(
+    images,
+    params.promptText,
+    params.outputRatio,
+    params.fps
+  );
+  
+  return { order: response.order };
+}
+
+export async function createMemoryRender(params: {
+  photoKeys: string[];
+  outputRatio: string;
+  fps: number;
+  promptText?: string;
+}): Promise<{ path: string; memoryId: string }> {
+  const resp = await fetch(`${API_BASE}/api/create-memory`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      photos: params.photoKeys.map(key => ({ key })),
+      outputRatio: params.outputRatio,
+      fps: params.fps,
+      promptText: params.promptText || '',
+    }),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Failed to create memory (${resp.status}): ${text}`);
+  }
+  const data = await resp.json();
+  return { path: data.path || data.videoPath, memoryId: data.memoryId || data.id };
+}
+

@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState, useRef } from "react";
-import { resolvePlaybackUrl } from "../utils/api";
+import { resolvePlaybackUrl, fetchPlaybackUrl } from "../utils/api";
 
 console.log('[BOOT] VideoPreview loaded from', import.meta.url, 'MODE=', import.meta.env.MODE);
 
@@ -106,9 +106,14 @@ export default function VideoPreview({ path: propPath, memoryId, onBack }: Video
         setLoading(true);
         setError('');
         console.log('[VIDEO] Resolving playback URL for:', path);
-        let playbackUrl: string;
+        let playbackUrl: string | null;
         try {
-          playbackUrl = await resolvePlaybackUrl(path);
+          // First try to resolve from path directly
+          playbackUrl = resolvePlaybackUrl(path);
+          // If path is a string but not a URL, fetch the playback URL
+          if (!playbackUrl && typeof path === 'string') {
+            playbackUrl = await fetchPlaybackUrl(path);
+          }
           console.log('[VIDEO] Resolved playback URL');
         } catch (apiError: any) {
           console.error('[VIDEO] Failed to resolve playback URL:', apiError);
