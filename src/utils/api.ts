@@ -108,7 +108,7 @@ export async function getPresignedUploadUrl(filename: string, mimeType: string):
   const resp = await fetch(`${API_BASE}/api/media/presign-upload`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fileName: filename, mimeType }),
+    body: JSON.stringify({ fileName: filename, contentType: mimeType }),
   });
   if (!resp.ok) {
     const text = await resp.text();
