@@ -91,11 +91,19 @@ export default async function handler(req: any, res: any) {
     // Validate API key
     const apiKey = process.env.OPENAI_API_KEY;
     const hasApiKey = !!apiKey;
-    console.log('[SEQUENCE] OPENAI_API_KEY exists:', hasApiKey);
+    const apiKeyPrefix = apiKey ? apiKey.substring(0, 7) + '...' : 'missing';
+    console.log('[SEQUENCE] OPENAI_API_KEY exists:', hasApiKey, 'prefix:', apiKeyPrefix);
     
     if (!apiKey) {
-      console.error('[SEQUENCE] OPENAI_API_KEY is not set');
-      return res.status(500).json({ error: 'OPENAI_API_KEY is not set' });
+      console.error('[SEQUENCE] OPENAI_API_KEY is not set in environment variables');
+      return res.status(500).json({ 
+        error: 'OPENAI_API_KEY is not set',
+        message: 'Please set OPENAI_API_KEY in Vercel environment variables. See SET_OPENAI_KEY.md for instructions.'
+      });
+    }
+    
+    if (!apiKey.startsWith('sk-')) {
+      console.warn('[SEQUENCE] OPENAI_API_KEY does not start with "sk-", may be invalid');
     }
 
     const context = typeof body.context === 'string' ? body.context.trim() : '';
@@ -182,8 +190,22 @@ Return ONLY valid JSON with keys: order (array of indices), beats (optional arra
       
       if (!r.ok) {
         console.error('[SEQUENCE] OpenAI API error:', r.status, JSON.stringify(json).substring(0, 200));
+        
+        // Provide more specific error messages
+        let errorMessage = "OpenAI API error";
+        if (r.status === 401) {
+          errorMessage = "OpenAI API key is invalid or expired";
+        } else if (r.status === 404) {
+          errorMessage = "OpenAI API endpoint not found (check model name)";
+        } else if (r.status === 429) {
+          errorMessage = "OpenAI API rate limit exceeded";
+        } else if (r.status >= 500) {
+          errorMessage = "OpenAI API server error";
+        }
+        
         return res.status(502).json({ 
-          error: "OpenAI auth failed", 
+          error: errorMessage,
+          details: r.status === 401 ? "Check your OPENAI_API_KEY in Vercel environment variables" : undefined,
           openaiStatus: r.status, 
           openaiBody: json 
         });
