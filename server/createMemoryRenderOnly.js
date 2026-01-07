@@ -1025,9 +1025,10 @@ async function renderSlideshow({
     
     if (isStaticMode || (motion.type === 'STATIC' && motion.startZoom === 1.0 && motion.endZoom === 1.0)) {
       // Static mode: no motion, just scale to output size, loop for duration, set fps
-      // Auto-reframe already crops to target aspect ratio, so just scale to exact dimensions
+      // Auto-reframe already crops to target aspect ratio, so scale to exact dimensions
+      // Use force_original_aspect_ratio=disable to ensure exact output size (images are pre-cropped)
       filterParts.push(
-        `[${i}:v]scale=${outputWidth}:${outputHeight},` +
+        `[${i}:v]scale=${outputWidth}:${outputHeight}:force_original_aspect_ratio=disable,` +
         `loop=${segmentFrames}:size=1:start=0,` +
         `setpts=PTS-STARTPTS,` +
         `fps=${fps},` +
@@ -1035,7 +1036,7 @@ async function renderSlideshow({
       );
       
       if (i < 3 || i >= N - 1) {
-        console.log(`[STATIC] seg#${i} no motion - static image duration=${clipDur.toFixed(2)}s frames=${segmentFrames}`);
+        console.log(`[STATIC] seg#${i} aspectRatio=${aspectRatio} outputSize=${outputWidth}x${outputHeight} duration=${clipDur.toFixed(2)}s frames=${segmentFrames}`);
       }
     } else {
       // Motion mode: apply Documentary Gimbal Move via zoompan at 4K, then downscale
@@ -1236,6 +1237,7 @@ async function createMemoryRenderOnly(req, res) {
     const fps = normalizeFps(rawFps || rawFrameRate);
     
     console.log('[CREATE_MEMORY] normalized aspectRatio =', aspectRatio);
+    console.log('[CREATE_MEMORY] aspectRatio numeric =', aspectRatioToNumber(aspectRatio));
     console.log('[CREATE_MEMORY] normalized fps =', fps);
     console.log('[CREATE_MEMORY] motionPack =', req.body?.motionPack);
     console.log('[CREATE_MEMORY] motionPack (final) =', finalMotionPack);
@@ -1411,6 +1413,8 @@ async function createMemoryRenderOnly(req, res) {
       await ensureDir(normalizedFramesDir);
       const targetAspectNum = aspectRatioToNumber(aspectRatio);
       
+      console.log(`[AUTO-REFRAme] Starting reframe for ${orderedKeys.length} images with targetAspect=${targetAspectNum} (${aspectRatio})`);
+      
       // Read images as buffers, create frame plans, and apply them
       for (let idx = 0; idx < orderedKeys.length; idx++) {
         const key = orderedKeys[idx];
@@ -1437,8 +1441,12 @@ async function createMemoryRenderOnly(req, res) {
             });
           }
           
-          // Log only if needsReview or confidence below threshold
-          if (plan.needsReview || plan.confidence < 0.55) {
+          // Log crop details for first few and last images to verify aspect ratio
+          if (idx < 3 || idx >= orderedKeys.length - 1) {
+            const cropAspect = (plan.crop.w / plan.crop.h).toFixed(3);
+            const targetAspectStr = targetAspectNum.toFixed(3);
+            console.log(`[AUTO-REFRAme] [${idx + 1}/${orderedKeys.length}] ${key} rotation=${plan.rotationDeg}° crop=${plan.crop.w}x${plan.crop.h} (aspect=${cropAspect}, target=${targetAspectStr}) anchor=(${plan.anchor?.x?.toFixed(2) || 'N/A'},${plan.anchor?.y?.toFixed(2) || 'N/A'}) confidence=${plan.confidence.toFixed(2)} ${plan.needsReview ? '[NEEDS_REVIEW]' : ''} ${plan.safeModeUsed ? '[SAFE_MODE]' : ''}`);
+          } else if (plan.needsReview || plan.confidence < 0.55) {
             console.log(`[AUTO-REFRAme] [${idx + 1}/${orderedKeys.length}] ${key} rotation=${plan.rotationDeg}° crop=${plan.crop.w}x${plan.crop.h} confidence=${plan.confidence.toFixed(2)} ${plan.needsReview ? '[NEEDS_REVIEW]' : ''} ${plan.safeModeUsed ? '[SAFE_MODE]' : ''}`);
           }
           
