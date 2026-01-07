@@ -912,11 +912,11 @@ async function renderSlideshow({
   let outputWidth, outputHeight;
   
   if (aspectRatio === '1:1') {
-    // Square - 4K: 2160x2160, output: 1080x1080
+    // Square - 4K: 2160x2160, output: 2000x2000 (Instagram size)
     renderWidth = 2160;
     renderHeight = 2160;
-    outputWidth = 1080;
-    outputHeight = 1080;
+    outputWidth = 2000;
+    outputHeight = 2000;
   } else if (aspectRatio === '9:16' || aspectRatio === 'portrait') {
     // Portrait - 4K: 2160x3840, output: 1080x1920
     renderWidth = 2160;
